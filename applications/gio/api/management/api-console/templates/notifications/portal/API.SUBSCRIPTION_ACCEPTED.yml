@@ -1,0 +1,5 @@
+title: |
+  [${api.name}] Assinatura aceita
+message: |
+  A solicitação de assinatura do aplicativo "${application.name}" 
+  para o plano "${plan.name}" foi aceita.

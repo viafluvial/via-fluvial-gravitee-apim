@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+	<head lang="en">
+		<title>Dados de planos de API corrigidos</title>
+	</head>
+	<body style="text-align: center;">
+		<header>
+			<#include "header.html" />
+		</header>
+		<div style="margin-top: 50px; color: #424e5a;">
+			<h3>Olá,</h3>
+			<p>
+				Detectamos anomalias de banco de dados em seus dados de planos na API <code>${api.name}</code> (id <code>${api.id}</code>), e ajustamos.<br/>
+				Veja os detalhes em relacionados <a href="https://docs.gravitee.io/apim/3.x/apim_installguide_migration.html#upgrade_to_3_10_8">documentação</a>
+			</p>
+			<#if closedPlans?size != 0>
+				<p>
+					<strong>Esses planos foram fechados:</strong><br/>
+					<#list closedPlans as plan>
+						- Plano <code>${plan.name}</code> (id <code>${api.id}</code>)<br/>
+					</#list>
+				</p>
+			</#if>
+			<#if createdPlans?size != 0>
+				<p>
+					<strong>Esses planos foram criados:</strong><br/>
+					<#list createdPlans as plan>
+						- Plano <code>${plan.name}</code> (id <code>${plan.id}</code>)<br/>
+					</#list>
+				</p>
+			</#if>
+		</div>
+	</body>
+</html>

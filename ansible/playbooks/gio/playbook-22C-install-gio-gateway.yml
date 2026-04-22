@@ -1,0 +1,95 @@
+---
+- name: Instalar/atualizar stack Gateway via Portainer API
+  hosts: all
+  become: true
+
+  vars:
+    network_name: "service-public"
+    gio_directory: "/opt/service-center/gio/gateway"
+    deployment_environment: "{{ lookup('env', 'ENVIRONMENT') | default('prd', true) }}"
+    gio_cluster_env_resolved: "{{ deployment_environment if deployment_environment in ['dsv', 'hml'] else '' }}"
+    gio_repository_ip_resolved: >-
+      {{
+        (hostvars[groups['repository'][0]].ansible_host
+          if (groups['repository'] is defined and (groups['repository'] | length) > 0)
+          else (ansible_host | default(inventory_hostname))
+        )
+      }}
+
+  tasks:
+    - name: Verificar se Docker está instalado
+      command: docker --version
+      register: docker_version
+      failed_when: docker_version.rc != 0
+
+    - name: Verificar se Docker Swarm está ativo
+      command: docker info --format '{{ "{{" }}.Swarm.LocalNodeState{{ "}}" }}'
+      register: swarm_state
+      failed_when: swarm_state.stdout != "active"
+
+    - name: Verificar se a rede overlay externa existe
+      command: docker network inspect "{{ network_name }}"
+      register: network_check
+      changed_when: false
+      failed_when: false
+
+    - name: Garantir que a rede está disponível antes de prosseguir
+      fail:
+        msg: "A rede {{ network_name }} não existe. Crie-a no Swarm (ex.: traefik/cluster base) antes de instalar o GIO."
+      when: network_check.rc != 0
+
+    - name: Criar diretórios da GIO Gateway
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - "{{ gio_directory }}"
+        - "{{ gio_directory }}/api-gateway/logs"
+
+    - name: Copiar compose do Gateway
+      copy:
+        src: "{{ playbook_dir }}/../../../applications/gio/api/gateway/gateway-gio-docker-compose.yml"
+        dest: "{{ gio_directory }}/docker-compose.yml"
+        mode: '0644'
+
+    - name: Copiar .env do Gateway
+      copy:
+        src: "{{ playbook_dir }}/.env.gateway"
+        dest: "{{ gio_directory }}/.env"
+        mode: '0644'
+
+    - name: Remover linhas vazias do .env (Gateway)
+      shell: "sed -i '/^$/d' {{ gio_directory }}/.env"
+      changed_when: true
+
+    - name: Ajustar SERVER_IP no .env (Gateway)
+      lineinfile:
+        path: "{{ gio_directory }}/.env"
+        regexp: '^SERVER_IP='
+        line: "SERVER_IP={{ gio_repository_ip_resolved }}"
+
+    - name: Ajustar clusters no .env (Gateway) em dsv/hml
+      lineinfile:
+        path: "{{ gio_directory }}/.env"
+        regexp: "^{{ item }}="
+        line: "{{ item }}={{ gio_cluster_env_resolved }}"
+      loop:
+        - GIO_ELASTICSEARCH_CLUSTER
+        - GIO_API_GATEWAY_CLUSTER
+      when: gio_cluster_env_resolved | length > 0
+
+    - name: Copiar arquivo de log de exemplo
+      copy:
+        src: "{{ playbook_dir }}/../../../applications/gio/api/gateway/api-gateway/logs/error.log"
+        dest: "{{ gio_directory }}/api-gateway/logs/error.log"
+        mode: '0644'
+      ignore_errors: true
+
+    - name: Deploy stack gio_gateway via Portainer API
+      include_tasks: ./tasks/portainer-deploy-stack.yml
+      vars:
+        portainer_stack_name: "gio_gateway"
+        portainer_compose_path: "{{ gio_directory }}/docker-compose.yml"
+        portainer_env_path: "{{ gio_directory }}/.env"
+        portainer_recreate_existing_stack: true

@@ -1,0 +1,135 @@
+---
+- name: Instalar e configurar Banco de dados Elasticsearch da Plataforma GIO com Docker Stack
+  hosts: all
+  become: true
+
+  vars:
+    gio_directory: "/opt/service-center/gio/elasticsearch"
+    env_file_local_path: "{{ playbook_dir }}/.env.elasticsearch"
+    env_file_remote_path: "{{ gio_directory }}/.env"
+    compose_file_name: "docker-compose.yml"
+    compose_file_src: "{{ playbook_dir }}/../../../applications/gio/repository/repository-gio-elasticsearch-docker-compose.yml"
+
+  tasks:
+
+    ### BLOCO 1: Verificações iniciais ###
+    - name: Verificar se Docker está instalado
+      command: docker --version
+      register: docker_version
+      failed_when: docker_version.rc != 0
+
+    - name: Verificar se Docker Swarm está ativo
+      command: docker info --format '{{ "{{" }}.Swarm.LocalNodeState{{ "}}" }}'
+      register: swarm_state
+      failed_when: swarm_state.stdout != "active"
+
+    ### BLOCO 2: Obter IP remoto e atualizar .env.elasticsearch (local) ###
+    - name: Obter IP da máquina remota
+      command: hostname -I
+      register: ip_output
+
+    - name: Extrair primeiro IP válido
+      set_fact:
+        host_ip: "{{ ip_output.stdout.split(' ')[0] }}"
+
+    - name: Garantir que o arquivo .env.elasticsearch local existe
+      copy:
+        dest: "{{ env_file_local_path }}"
+        content: ""
+        force: no
+        mode: '0644'
+      delegate_to: localhost
+      become: false
+
+    - name: Inserir ou atualizar SERVER_IP no .env.elasticsearch local
+      lineinfile:
+        path: "{{ env_file_local_path }}"
+        regexp: '^SERVER_IP='
+        line: "SERVER_IP={{ host_ip }}"
+        create: yes
+        state: present
+      delegate_to: localhost
+      become: false
+
+    - name: Mostrar conteúdo final do .env.elasticsearch
+      shell: cat "{{ env_file_local_path }}"
+      register: env_final
+      delegate_to: localhost
+      become: false
+
+    - name: Debug do .env.elasticsearch final
+      debug:
+        var: env_final.stdout_lines
+      delegate_to: localhost
+      become: false
+
+    ### BLOCO 3: Preparar estrutura de diretórios no host remoto ###
+    - name: Criar diretórios para Elasticsearch
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - "{{ gio_directory }}"
+        - "{{ gio_directory }}/data"
+        - "{{ gio_directory }}/logs"
+
+    - name: Ajustar permissões e grupos dos diretórios
+      shell: |
+        chmod -R g+rwx {{ gio_directory }}/data
+        chgrp -R 0 {{ gio_directory }}/data
+        chmod -R g+rwx {{ gio_directory }}/logs
+        chgrp -R 0 {{ gio_directory }}/logs
+
+    ### BLOCO 4: Copiar arquivos de configuração ###
+    - name: Copiar docker-compose.yml (mantendo $VAR)
+      copy:
+        src: "{{ compose_file_src }}"
+        dest: "{{ gio_directory }}/{{ compose_file_name }}"
+        mode: '0644'
+
+    - name: Copiar .env.elasticsearch local para o host remoto
+      copy:
+        src: "{{ env_file_local_path }}"
+        dest: "{{ env_file_remote_path }}"
+        mode: '0644'
+
+    - name: Verificar existência do arquivo .env remoto
+      stat:
+        path: "{{ env_file_remote_path }}"
+      register: env_check
+
+    - name: Exibir resultado da verificação do .env remoto
+      debug:
+        var: env_check.stat.exists     
+
+    ### BLOCO 5: Deploy com Docker Stack ###
+    - name: Executar docker stack deploy com docker-compose.yml e .env
+      shell: |
+        set -a
+        . "{{ env_file_remote_path }}"
+        set +a
+        docker stack deploy -c {{ compose_file_name }} gio_elasticsearch
+      args:
+        chdir: "{{ gio_directory }}"
+
+    ### BLOCO 6: Verificação pós-deploy ###
+    - name: Verificar status da stack GIO Elasticsearch
+      shell: docker stack ps gio_elasticsearch
+      register: stack_status
+      ignore_errors: true
+
+    - name: Exibir status da stack GIO Elasticsearch
+      debug:
+        msg: "{{ stack_status.stdout_lines }}"
+
+    - name: Exibir logs do serviço GIO Elasticsearch após a implantação
+      shell: docker service logs -f --tail 50 gio_elasticsearch_gio_elasticsearch
+      register: gio_elasticsearch_logs
+      async: 60
+      poll: 0
+      ignore_errors: true
+
+    - name: Exibir logs do GIO Elasticsearch
+      debug:
+        msg: "{{ gio_elasticsearch_logs }}"

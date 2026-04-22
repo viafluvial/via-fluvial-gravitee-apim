@@ -1,0 +1,3 @@
+title: API depreciada
+message: |
+  "${api.name}" foi depreciada por ${user.displayName}.

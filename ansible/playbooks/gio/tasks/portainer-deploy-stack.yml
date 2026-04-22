@@ -1,0 +1,254 @@
+---
+- name: Validar parâmetros de deploy da stack no Portainer
+  assert:
+    that:
+      - portainer_stack_name is defined
+      - portainer_stack_name | length > 0
+      - portainer_compose_path is defined
+      - portainer_compose_path | length > 0
+      - portainer_env_path is defined
+      - portainer_env_path | length > 0
+    fail_msg: "Parâmetros obrigatórios ausentes para deploy via Portainer API: portainer_stack_name, portainer_compose_path, portainer_env_path."
+
+- name: Definir estratégia de atualização de stack
+  set_fact:
+    portainer_recreate_existing_stack_resolved: "{{ portainer_recreate_existing_stack | default(false, true) | bool }}"
+
+- name: Autenticar no Portainer para deploy
+  include_tasks: ./portainer-auth.yml
+
+- name: Carregar compose remoto da stack
+  slurp:
+    path: "{{ portainer_compose_path }}"
+  register: portainer_compose_file
+
+- name: Carregar .env remoto da stack
+  slurp:
+    path: "{{ portainer_env_path }}"
+  register: portainer_env_file
+
+- name: Extrair nomes de serviços do compose (parse YAML)
+  block:
+    - name: Parsear compose YAML
+      set_fact:
+        portainer_compose_yaml: "{{ (portainer_compose_file.content | b64decode) | from_yaml }}"
+
+    - name: Obter lista de serviços do compose
+      set_fact:
+        portainer_compose_services: "{{ (portainer_compose_yaml.services | default({})) | dict2items | map(attribute='key') | list }}"
+  rescue:
+    - name: Fallback (regex) para extrair nomes de serviços do compose
+      set_fact:
+        portainer_compose_services: "{{ (portainer_compose_file.content | b64decode) | regex_findall('(?m)^\\s{2}([A-Za-z0-9_-]+):\\s*$') }}"
+
+- name: Validar que serviços foram detectados no compose
+  assert:
+    that:
+      - (portainer_compose_services | default([]) | length) > 0
+    fail_msg: "Não foi possível detectar serviços no compose em {{ portainer_compose_path }}. Verifique o YAML do docker-compose."
+
+- name: Montar nomes completos esperados de serviços da stack
+  set_fact:
+    portainer_stack_service_names: "{{ portainer_compose_services | map('regex_replace', '^(.*)$', portainer_stack_name ~ '_\\1') | list }}"
+
+- name: Inicializar lista de variáveis de ambiente da stack
+  set_fact:
+    portainer_stack_env: []
+
+- name: Montar variáveis de ambiente para o Portainer
+  set_fact:
+    portainer_stack_env: "{{ portainer_stack_env + [ {'name': (item.split('=', 1)[0]), 'value': (item.split('=', 1)[1]) } ] }}"
+  loop: >-
+    {{
+      (portainer_env_file.content | b64decode).splitlines()
+      | map('trim')
+      | reject('equalto', '')
+      | reject('match', '^#')
+      | select('match', '^[A-Za-z_][A-Za-z0-9_]*=')
+      | list
+    }}
+  no_log: true
+
+- name: Listar stacks existentes no endpoint do Portainer
+  uri:
+    url: "{{ portainer_base_url }}/api/stacks?endpointId={{ portainer_endpoint_id_resolved }}"
+    method: GET
+    headers: "{{ portainer_headers }}"
+    return_content: true
+    status_code: 200
+    validate_certs: "{{ portainer_validate_certs_resolved }}"
+    timeout: "{{ portainer_api_timeout_resolved }}"
+  register: portainer_stacks_response
+  become: false
+  delegate_to: "{{ portainer_api_delegate_to_resolved }}"
+
+- name: Listar serviços do Docker no endpoint do Portainer
+  uri:
+    url: "{{ portainer_base_url }}/api/endpoints/{{ portainer_endpoint_id_resolved }}/docker/services"
+    method: GET
+    headers: "{{ portainer_headers }}"
+    return_content: true
+    status_code: 200
+    validate_certs: "{{ portainer_validate_certs_resolved }}"
+    timeout: "{{ portainer_api_timeout_resolved }}"
+  register: portainer_services_response
+  become: false
+  delegate_to: "{{ portainer_api_delegate_to_resolved }}"
+
+- name: Identificar serviços órfãos com nomes da stack alvo
+  set_fact:
+    portainer_orphan_services_to_remove: "{{ (portainer_services_response.json | default([])) | selectattr('Spec.Name', 'defined') | selectattr('Spec.Name', 'in', portainer_stack_service_names) | list }}"
+
+- name: Remover serviços órfãos via API do Portainer
+  uri:
+    url: "{{ portainer_base_url }}/api/endpoints/{{ portainer_endpoint_id_resolved }}/docker/services/{{ item.ID }}"
+    method: DELETE
+    headers: "{{ portainer_headers }}"
+    status_code: [200, 204]
+    validate_certs: "{{ portainer_validate_certs_resolved }}"
+    timeout: "{{ portainer_api_timeout_resolved }}"
+  loop: "{{ portainer_orphan_services_to_remove }}"
+  loop_control:
+    label: "{{ item.Spec.Name | default(item.ID) }}"
+  become: false
+  delegate_to: "{{ portainer_api_delegate_to_resolved }}"
+  when:
+    - portainer_recreate_existing_stack_resolved
+    - (portainer_orphan_services_to_remove | default([]) | length) > 0
+
+- name: Encontrar stack existente por nome
+  set_fact:
+    portainer_existing_stack: "{{ (portainer_stacks_response.json | selectattr('Name', 'equalto', portainer_stack_name) | list | first) | default({}) }}"
+
+- name: Obter dados do Swarm no endpoint do Portainer
+  uri:
+    url: "{{ portainer_base_url }}/api/endpoints/{{ portainer_endpoint_id_resolved }}/docker/swarm"
+    method: GET
+    headers: "{{ portainer_headers }}"
+    return_content: true
+    status_code: 200
+    validate_certs: "{{ portainer_validate_certs_resolved }}"
+    timeout: "{{ portainer_api_timeout_resolved }}"
+  register: portainer_swarm_response
+  become: false
+  delegate_to: "{{ portainer_api_delegate_to_resolved }}"
+
+- name: Validar Swarm ID retornado pelo endpoint do Portainer
+  assert:
+    that:
+      - portainer_swarm_response.json.ID is defined
+      - portainer_swarm_response.json.ID | length > 0
+    fail_msg: "Não foi possível obter Swarm ID do endpoint {{ portainer_endpoint_id_resolved }} no Portainer."
+
+- name: Criar stack no Portainer (quando não existe) - endpoint moderno
+  block:
+    - name: Criar stack no Portainer via endpoint moderno
+      uri:
+        url: "{{ portainer_base_url }}/api/stacks/create/swarm/string?endpointId={{ portainer_endpoint_id_resolved }}"
+        method: POST
+        headers: "{{ portainer_headers }}"
+        body_format: json
+        body:
+          Name: "{{ portainer_stack_name }}"
+          StackFileContent: "{{ portainer_compose_file.content | b64decode }}"
+          Env: "{{ portainer_stack_env }}"
+          SwarmID: "{{ portainer_swarm_response.json.ID }}"
+          FromAppTemplate: false
+        status_code: [200, 201, 202]
+        validate_certs: "{{ portainer_validate_certs_resolved }}"
+        timeout: "{{ portainer_api_timeout_resolved }}"
+      become: false
+      delegate_to: "{{ portainer_api_delegate_to_resolved }}"
+  rescue:
+    - name: Criar stack no Portainer via endpoint legado (fallback)
+      uri:
+        url: "{{ portainer_base_url }}/api/stacks?type=1&method=string&endpointId={{ portainer_endpoint_id_resolved }}"
+        method: POST
+        headers: "{{ portainer_headers }}"
+        body_format: json
+        body:
+          Name: "{{ portainer_stack_name }}"
+          StackFileContent: "{{ portainer_compose_file.content | b64decode }}"
+          Env: "{{ portainer_stack_env }}"
+          SwarmID: "{{ portainer_swarm_response.json.ID }}"
+          FromAppTemplate: false
+        status_code: [200, 201, 202]
+        validate_certs: "{{ portainer_validate_certs_resolved }}"
+        timeout: "{{ portainer_api_timeout_resolved }}"
+      become: false
+      delegate_to: "{{ portainer_api_delegate_to_resolved }}"
+  when: portainer_existing_stack == {}
+
+- name: Remover stack existente no Portainer antes de recriar
+  uri:
+    url: "{{ portainer_base_url }}/api/stacks/{{ portainer_existing_stack.Id }}?endpointId={{ portainer_endpoint_id_resolved }}"
+    method: DELETE
+    headers: "{{ portainer_headers }}"
+    status_code: [200, 204]
+    validate_certs: "{{ portainer_validate_certs_resolved }}"
+    timeout: "{{ portainer_api_timeout_resolved }}"
+  become: false
+  delegate_to: "{{ portainer_api_delegate_to_resolved }}"
+  when:
+    - portainer_existing_stack != {}
+    - portainer_recreate_existing_stack_resolved
+
+- name: Recriar stack no Portainer após remoção - endpoint moderno
+  block:
+    - name: Recriar stack no Portainer via endpoint moderno
+      uri:
+        url: "{{ portainer_base_url }}/api/stacks/create/swarm/string?endpointId={{ portainer_endpoint_id_resolved }}"
+        method: POST
+        headers: "{{ portainer_headers }}"
+        body_format: json
+        body:
+          Name: "{{ portainer_stack_name }}"
+          StackFileContent: "{{ portainer_compose_file.content | b64decode }}"
+          Env: "{{ portainer_stack_env }}"
+          SwarmID: "{{ portainer_swarm_response.json.ID }}"
+          FromAppTemplate: false
+        status_code: [200, 201, 202]
+        validate_certs: "{{ portainer_validate_certs_resolved }}"
+        timeout: "{{ portainer_api_timeout_resolved }}"
+      become: false
+      delegate_to: "{{ portainer_api_delegate_to_resolved }}"
+  rescue:
+    - name: Recriar stack no Portainer via endpoint legado (fallback)
+      uri:
+        url: "{{ portainer_base_url }}/api/stacks?type=1&method=string&endpointId={{ portainer_endpoint_id_resolved }}"
+        method: POST
+        headers: "{{ portainer_headers }}"
+        body_format: json
+        body:
+          Name: "{{ portainer_stack_name }}"
+          StackFileContent: "{{ portainer_compose_file.content | b64decode }}"
+          Env: "{{ portainer_stack_env }}"
+          SwarmID: "{{ portainer_swarm_response.json.ID }}"
+          FromAppTemplate: false
+        status_code: [200, 201, 202]
+        validate_certs: "{{ portainer_validate_certs_resolved }}"
+        timeout: "{{ portainer_api_timeout_resolved }}"
+      become: false
+      delegate_to: "{{ portainer_api_delegate_to_resolved }}"
+  when:
+    - portainer_existing_stack != {}
+    - portainer_recreate_existing_stack_resolved
+
+- name: Atualizar stack existente no Portainer (quando não é recriação)
+  uri:
+    url: "{{ portainer_base_url }}/api/stacks/{{ portainer_existing_stack.Id }}?endpointId={{ portainer_endpoint_id_resolved }}"
+    method: PUT
+    headers: "{{ portainer_headers }}"
+    body_format: json
+    body:
+      StackFileContent: "{{ portainer_compose_file.content | b64decode }}"
+      Env: "{{ portainer_stack_env }}"
+      Prune: true
+    status_code: [200, 201, 202]
+    validate_certs: "{{ portainer_validate_certs_resolved }}"
+    timeout: "{{ portainer_api_timeout_resolved }}"
+  become: false
+  delegate_to: "{{ portainer_api_delegate_to_resolved }}"
+  when:
+    - portainer_existing_stack != {}
+    - not portainer_recreate_existing_stack_resolved

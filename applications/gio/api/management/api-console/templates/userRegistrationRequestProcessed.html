@@ -1,0 +1,16 @@
+<html>
+	<body style="text-align: center;">
+		<header>
+			<#include "header.html" />
+		</header>
+		<div style="margin-top: 50px; color: #424e5a;">
+			<h3>Olá ${user.displayName},</h3>
+			<#if user.status == 'ACTIVE'>
+				<p>O seu pedido de registo foi validado com sucesso.</p>
+				<p>Agora você pode entrar em nossa Plataforma API.</p>
+			<#else>
+				<p>Sua solicitação de registro foi rejeitada.</p>
+			</#if>
+		</div>
+	</body>
+</html>

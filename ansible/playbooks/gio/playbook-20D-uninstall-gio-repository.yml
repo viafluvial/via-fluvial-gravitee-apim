@@ -1,0 +1,35 @@
+---
+- name: Remover stacks do Repository via Portainer API
+  hosts: all
+  become: true
+
+  tasks:
+    - name: Remover stack gio_mongo_express
+      include_tasks: ./tasks/portainer-remove-stack.yml
+      vars:
+        portainer_stack_name: "gio_mongo_express"
+
+    - name: Remover stack gio_kibana
+      include_tasks: ./tasks/portainer-remove-stack.yml
+      vars:
+        portainer_stack_name: "gio_kibana"
+
+    - name: Remover stack gio_elasticsearch
+      include_tasks: ./tasks/portainer-remove-stack.yml
+      vars:
+        portainer_stack_name: "gio_elasticsearch"
+
+    - name: Remover stack gio_mongo
+      include_tasks: ./tasks/portainer-remove-stack.yml
+      vars:
+        portainer_stack_name: "gio_mongo"
+
+    - name: Remover diretórios do Repository (opcional)
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "/opt/service-center/gio/mongo-express"
+        - "/opt/service-center/gio/kibana"
+        - "/opt/service-center/gio/elasticsearch"
+        - "/opt/service-center/gio/mongo"

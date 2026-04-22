@@ -1,0 +1,3 @@
+title: Registo de novo utilizador para validação
+message: |
+  O cadastro do usuário "${user.firstname} ${user.lastname}" deve sser validado.

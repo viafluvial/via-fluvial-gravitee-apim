@@ -1,0 +1,3 @@
+title: Registo de novo utilizador
+message: |
+  "${user.firstname} ${user.lastname}" está registrado.

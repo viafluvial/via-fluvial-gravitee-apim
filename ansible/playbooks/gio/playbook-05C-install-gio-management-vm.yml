@@ -1,0 +1,133 @@
+---
+- name: Instalar e configurar a Plataforma GIO Management com Docker Compose moderno
+  hosts: all
+  become: true
+
+  vars:
+    gio_directory: "/opt/service-center/gio/management"
+    env_file_local_path: "{{ playbook_dir }}/.env.management"
+    env_file_remote_path: "{{ gio_directory }}/.env"
+    compose_file_name: "docker-compose.yml"
+    compose_file_src: "{{ playbook_dir }}/../../../applications/gio/api/management/management-gio-docker-compose.yml"
+
+  tasks:
+
+  ### BLOCO 1: Verificações iniciais no host remoto
+  - name: Verificar se Docker está instalado
+    command: docker --version
+    register: docker_version
+    failed_when: docker_version.rc != 0
+
+  - name: Verificar se Docker Swarm está ativo
+    command: docker info --format '{{ "{{" }}.Swarm.LocalNodeState{{ "}}" }}'
+    register: swarm_state
+    failed_when: swarm_state.stdout != "active"
+
+  ### BLOCO 2: Obter IP do host remoto
+  - name: Obter o IP local da interface de rede no host remoto
+    command: hostname -I
+    register: ip_output
+
+  - name: Extrair o primeiro IP válido do host remoto
+    set_fact:
+      host_ip: "{{ ip_output.stdout.split(' ')[0] }}"
+
+  ### BLOCO 3: Preparar o arquivo .env.management localmente
+  - name: Garantir que o arquivo .env.management local existe
+    copy:
+      dest: "{{ env_file_local_path }}"
+      content: ""
+      force: no
+      mode: '0644'
+    delegate_to: localhost
+    become: false
+
+  - name: Inserir ou atualizar SERVER_IP no .env.management local
+    lineinfile:
+      path: "{{ env_file_local_path }}"
+      regexp: '^SERVER_IP='
+      line: "SERVER_IP={{ host_ip }}"
+      create: yes
+      state: present
+    delegate_to: localhost
+    become: false
+
+  - name: Mostrar conteúdo depois da gravação
+    shell: cat "{{ env_file_local_path }}"
+    register: conteudo_depois
+    delegate_to: localhost
+    become: false
+
+  - name: Exibir conteúdo atualizado do .env.management local
+    debug:
+      var: conteudo_depois.stdout_lines
+    delegate_to: localhost
+    become: false
+
+  ### BLOCO 4: Preparação do ambiente remoto
+  - name: Criar estrutura de diretórios para GIO Management
+    file:
+      path: "{{ item }}"
+      state: directory
+      mode: '0755'
+    loop:
+      - "{{ gio_directory }}"
+      - "{{ gio_directory }}/api-console/config"
+      - "{{ gio_directory }}/api-console/logs"
+      - "{{ gio_directory }}/api-console/templates"
+      - "{{ gio_directory }}/api-console/plugins"
+      - "{{ gio_directory }}/console/logs"
+      - "{{ gio_directory }}/portal/logs"
+
+  - name: Copiar docker-compose.yml para o host remoto
+    copy:
+      src: "{{ compose_file_src }}"
+      dest: "{{ gio_directory }}/{{ compose_file_name }}"
+      mode: '0644'
+
+  - name: Copiar arquivos de log de exemplo
+    copy:
+      src: "{{ item.src }}"
+      dest: "{{ item.dest }}"
+      mode: '0644'
+    loop:
+      - { src: "{{ playbook_dir }}/../../../applications/gio/api/management/api-console/logs/error.log", dest: "{{ gio_directory }}/api-console/logs/error.log" }
+      - { src: "{{ playbook_dir }}/../../../applications/gio/api/management/console/logs/error.log", dest: "{{ gio_directory }}/console/logs/error.log" }
+      - { src: "{{ playbook_dir }}/../../../applications/gio/api/management/portal/logs/error.log", dest: "{{ gio_directory }}/portal/logs/error.log" }
+
+  - name: Copiar .env.management local para o host remoto
+    copy:
+      src: "{{ env_file_local_path }}"
+      dest: "{{ env_file_remote_path }}"
+      mode: '0644'
+
+  ### BLOCO 5: Executar deploy da stack
+  - name: Verificar existência do arquivo .env no host remoto
+    stat:
+      path: "{{ env_file_remote_path }}"
+    register: env_check
+
+  - name: Exibir resultado da verificação do .env
+    debug:
+      var: env_check.stat.exists
+
+  - name: Executar docker stack deploy com variáveis do .env
+    shell: |
+      set -a
+      . "{{ env_file_remote_path }}"
+      set +a
+      docker stack deploy -c {{ compose_file_name }} gio_management
+    args:
+      chdir: "{{ gio_directory }}"
+
+  ### BLOCO 6: Verificação final
+  - name: Verificar status dos containers da stack GIO Management
+    shell: docker compose -f {{ compose_file_name }} ps
+    args:
+      chdir: "{{ gio_directory }}"
+    register: stack_status
+    ignore_errors: true
+
+  - name: Exibir containers em execução
+    debug:
+      msg: "{{ stack_status.stdout_lines }}"

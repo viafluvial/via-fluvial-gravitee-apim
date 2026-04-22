@@ -1,0 +1,42 @@
+---
+- name: Limpeza operacional de serviços (task history / force update)
+  hosts: all
+  become: true
+
+  vars:
+    task_history_limit: "{{ task_history_limit | default(1) }}"
+    clean_stacks_csv: "{{ clean_stacks_csv | default('gio_mongo,gio_elasticsearch,gio_kibana,gio_mongo_express,gio_management,gio_gateway') }}"
+
+  tasks:
+    - name: Validar Swarm ativo
+      command: docker info --format '{{ "{{" }}.Swarm.LocalNodeState{{ "}}" }}'
+      register: swarm_state
+      changed_when: false
+      failed_when: swarm_state.stdout != "active"
+
+    - name: Definir task history limit
+      command: docker swarm update --task-history-limit {{ task_history_limit | int }}
+      changed_when: true
+
+    - name: Listar serviços do Swarm
+      command: docker service ls --format '{{ "{{" }}.Name{{ "}}" }}'
+      register: docker_services
+      changed_when: false
+
+    - name: Filtrar serviços das stacks alvo
+      set_fact:
+        clean_services_list: >-
+          {{
+            (docker_services.stdout_lines | default([]))
+            | select('match', '^(' ~ (clean_stacks_csv | regex_replace('\\s+', '') | regex_replace(',', '|')) ~ ')_')
+            | list
+          }}
+
+    - name: Exibir serviços encontrados
+      debug:
+        msg: "{{ clean_services_list | default([]) }}"
+
+    - name: Forçar rollout de serviços encontrados
+      command: docker service update --force {{ item }}
+      loop: "{{ clean_services_list | default([]) }}"
+      when: (clean_services_list | default([]) | length) > 0

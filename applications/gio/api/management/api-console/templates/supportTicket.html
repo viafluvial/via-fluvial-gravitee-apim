@@ -1,0 +1,17 @@
+<html>
+	<body>
+		<header style="text-align: center;">
+			<#include "header.html" />
+		</header>
+		<div style="margin-top: 50px; color: #424e5a;">
+			<p><b>Um ticket foi criado por ${user.displayName}</b></p>
+			<#if api??>
+				<p><b>API: ${api.name} (${api.version})</b></p>
+			</#if>
+			<#if application??>
+				<p><b>Aplicação: ${application.name} (${application.primaryOwner.displayName})</b></p>
+			</#if>
+			<p>${content}</p>
+		</div>
+	</body>
+</html>

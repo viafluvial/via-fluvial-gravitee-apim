@@ -1,0 +1,10 @@
+---
+- name: Validar stack Management via Portainer API
+  hosts: all
+  become: true
+
+  tasks:
+    - name: Validar stack gio_management
+      include_tasks: ./tasks/portainer-validate-stack.yml
+      vars:
+        portainer_stack_name: "gio_management"

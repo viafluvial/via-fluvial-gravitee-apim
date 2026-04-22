@@ -1,0 +1,18 @@
+---
+- name: Remover stack Management via Portainer API
+  hosts: all
+  become: true
+
+  vars:
+    gio_directory: "/opt/service-center/gio/management"
+
+  tasks:
+    - name: Remover stack gio_management
+      include_tasks: ./tasks/portainer-remove-stack.yml
+      vars:
+        portainer_stack_name: "gio_management"
+
+    - name: Remover diretório do Management (opcional)
+      file:
+        path: "{{ gio_directory }}"
+        state: absent

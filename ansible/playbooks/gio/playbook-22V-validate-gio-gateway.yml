@@ -1,0 +1,10 @@
+---
+- name: Validar stack Gateway via Portainer API
+  hosts: all
+  become: true
+
+  tasks:
+    - name: Validar stack gio_gateway
+      include_tasks: ./tasks/portainer-validate-stack.yml
+      vars:
+        portainer_stack_name: "gio_gateway"

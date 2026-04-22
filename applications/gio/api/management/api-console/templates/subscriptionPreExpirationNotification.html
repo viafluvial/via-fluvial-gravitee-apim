@@ -1,0 +1,11 @@
+<html>
+    <body style="text-align: center">
+        <header><#include "header.html" /></header>
+        <div style="margin-top: 50px; color: #424e5a">
+            <h3>Olá,</h3>
+            <p>
+                <#if apiKey??> A chave de API <code>${apiKey.key}</code> relacionado ao plano<#else>A assinatura do plano</#if> <b>${plan.name}</b> para a API <b>${api.name}</b>e aplicação <b>${application.name}</b> irá expirar em ${expirationDelay} dias.
+            </p>
+        </div>
+    </body>
+</html>

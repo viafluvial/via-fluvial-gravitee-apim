@@ -1,0 +1,3 @@
+title: Convite de grupo
+message: |
+    "${user.displayName}" foi convidado para participar do grupo "${group.name}".

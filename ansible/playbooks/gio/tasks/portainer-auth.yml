@@ -1,0 +1,130 @@
+---
+- name: Definir parâmetros de conexão da API do Portainer
+  set_fact:
+    portainer_base_url: "{{ (portainer_url | default(lookup('env', 'PORTAINER_URL'), true)) | regex_replace('/$', '') }}"
+    portainer_endpoint_id_resolved: "{{ portainer_endpoint_id | default(lookup('env', 'PORTAINER_ENDPOINT_ID'), true) }}"
+    portainer_endpoint_name_resolved: "{{ portainer_endpoint_name | default(lookup('env', 'PORTAINER_ENDPOINT_NAME'), true) }}"
+    portainer_api_key_resolved: "{{ portainer_api_key | default(lookup('env', 'PORTAINER_API_KEY'), true) }}"
+    portainer_username_resolved: "{{ portainer_username | default(lookup('env', 'PORTAINER_USERNAME'), true) }}"
+    portainer_password_resolved: "{{ portainer_password | default(lookup('env', 'PORTAINER_PASSWORD'), true) }}"
+    portainer_validate_certs_resolved: "{{ portainer_validate_certs | default((lookup('env', 'PORTAINER_VALIDATE_CERTS') | default('false', true)) | bool, true) }}"
+    portainer_api_delegate_to_resolved: "{{ portainer_api_delegate_to | default((lookup('env', 'PORTAINER_API_DELEGATE_TO') | default('localhost', true)), true) }}"
+    portainer_api_timeout_resolved: "{{ (portainer_api_timeout | default(lookup('env', 'PORTAINER_API_TIMEOUT'), true) | default('120', true)) | int }}"
+
+- name: Validar parâmetros mínimos da API do Portainer
+  assert:
+    that:
+      - portainer_base_url is defined
+      - portainer_base_url | length > 0
+      - (portainer_endpoint_id_resolved is defined and (portainer_endpoint_id_resolved | string | length > 0)) or (portainer_endpoint_name_resolved is defined and (portainer_endpoint_name_resolved | string | length > 0))
+    fail_msg: "Defina PORTAINER_URL e PORTAINER_ENDPOINT_ID ou PORTAINER_ENDPOINT_NAME (via ansible/config/portainer-*.env carregado pelo wrapper, ou variáveis de ambiente)."
+
+- name: Validar credencial da API do Portainer
+  assert:
+    that:
+      - (portainer_api_key_resolved | default('', true) | length > 0) or ((portainer_username_resolved | default('', true) | length > 0) and (portainer_password_resolved | default('', true) | length > 0))
+    fail_msg: "Defina PORTAINER_API_KEY ou PORTAINER_USERNAME/PORTAINER_PASSWORD para autenticação na API do Portainer."
+
+- name: Autenticar na API do Portainer com usuário/senha
+  uri:
+    url: "{{ portainer_base_url }}/api/auth"
+    method: POST
+    body_format: json
+    body:
+      username: "{{ portainer_username_resolved }}"
+      password: "{{ portainer_password_resolved }}"
+    status_code: 200
+    validate_certs: "{{ portainer_validate_certs_resolved }}"
+    timeout: "{{ portainer_api_timeout_resolved }}"
+  register: portainer_auth_response
+  until: portainer_auth_response.status is defined and portainer_auth_response.status == 200
+  retries: 5
+  delay: 3
+  no_log: true
+  become: false
+  delegate_to: "{{ portainer_api_delegate_to_resolved }}"
+  when: portainer_api_key_resolved | default('', true) | length == 0
+
+- name: Montar cabeçalhos para chamadas da API do Portainer
+  set_fact:
+    portainer_headers: >-
+      {{
+        {'X-API-Key': portainer_api_key_resolved}
+        if (portainer_api_key_resolved | default('', true) | length > 0)
+        else {'Authorization': 'Bearer ' ~ (portainer_auth_response.json.jwt | default(''))}
+      }}
+
+- name: Obter lista de endpoints do Portainer
+  uri:
+    url: "{{ portainer_base_url }}/api/endpoints"
+    method: GET
+    headers: "{{ portainer_headers }}"
+    status_code: 200
+    validate_certs: "{{ portainer_validate_certs_resolved }}"
+    timeout: "{{ portainer_api_timeout_resolved }}"
+  register: portainer_endpoints_response
+  become: false
+  delegate_to: "{{ portainer_api_delegate_to_resolved }}"
+
+- name: Normalizar endpointId quando não-numérico
+  set_fact:
+    portainer_endpoint_id_resolved: ""
+  when:
+    - portainer_endpoint_id_resolved is defined
+    - (portainer_endpoint_id_resolved | string | length) > 0
+    - (portainer_endpoint_id_resolved | string) is not match('^[0-9]+$')
+
+- name: Validar endpointId informado (se existir)
+  uri:
+    url: "{{ portainer_base_url }}/api/endpoints/{{ portainer_endpoint_id_resolved }}"
+    method: GET
+    headers: "{{ portainer_headers }}"
+    status_code:
+      - 200
+      - 404
+    validate_certs: "{{ portainer_validate_certs_resolved }}"
+    timeout: "{{ portainer_api_timeout_resolved }}"
+  register: portainer_endpoint_validation
+  become: false
+  delegate_to: "{{ portainer_api_delegate_to_resolved }}"
+  when: portainer_endpoint_id_resolved is defined and (portainer_endpoint_id_resolved | string | length > 0)
+
+- name: Limpar endpointId quando inválido (404)
+  set_fact:
+    portainer_endpoint_id_resolved: ""
+  when:
+    - portainer_endpoint_validation is defined
+    - portainer_endpoint_validation.status is defined
+    - portainer_endpoint_validation.status == 404
+
+- name: Resolver endpointId por endpoint name (quando necessário)
+  set_fact:
+    portainer_endpoint_id_resolved: >-
+      {{
+        (
+          portainer_endpoints_response.json
+          | selectattr('Name', 'defined')
+          | selectattr('Name', 'equalto', portainer_endpoint_name_resolved)
+          | map(attribute='Id')
+          | list
+          | first
+        ) | default('', true)
+      }}
+  when:
+    - (portainer_endpoint_id_resolved | default('', true) | string | length) == 0
+    - portainer_endpoint_name_resolved is defined
+    - (portainer_endpoint_name_resolved | string | length) > 0
+
+- name: Resolver endpointId automaticamente quando existir apenas 1 endpoint
+  set_fact:
+    portainer_endpoint_id_resolved: "{{ (portainer_endpoints_response.json | first).Id }}"
+  when:
+    - (portainer_endpoint_id_resolved | default('', true) | string | length) == 0
+    - (portainer_endpoints_response.json | default([]) | length) == 1
+
+- name: Validar que endpointId foi resolvido
+  assert:
+    that:
+      - portainer_endpoint_id_resolved is defined
+      - (portainer_endpoint_id_resolved | string | length) > 0
+    fail_msg: "Não foi possível resolver PORTAINER_ENDPOINT_ID. Verifique PORTAINER_ENDPOINT_NAME/ID no arquivo env."

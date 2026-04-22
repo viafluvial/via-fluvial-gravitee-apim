@@ -1,0 +1,5 @@
+title: |
+  [${api.name}] Assinatura retomada
+message: |
+  A solicitação de assinatura do aplicativo "${application.name}" 
+  do plano "${plan.name}" foi retomada.

@@ -1,0 +1,4 @@
+title: Um usuário fez login pela primeira vez
+message: |
+  "${user.displayName}" fez login pela primeira vez.
+

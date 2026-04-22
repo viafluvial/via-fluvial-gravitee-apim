@@ -1,0 +1,19 @@
+<html>
+	<body style="text-align: center;">
+		<header>
+			<#include "header.html" />
+		</header>
+		<div style="margin-top: 50px; color: #424e5a;">
+			<h3>Olá, um novo usuário acabou de ser criado!</h3>
+			<p>
+				O usuário
+				<#if user.firstname?? && user.lastname??>
+                  ${user.firstname} ${user.lastname}
+                <#else>
+                  ${user.email}
+                </#if>
+                agora está criado.
+			</p>
+		</div>
+	</body>
+</html>

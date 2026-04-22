@@ -1,0 +1,77 @@
+version: '3.9'
+
+services:      
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:${GIO_ELASTICSEARCH_VERSION}
+
+    ports:
+      - "9200:9200"
+
+    environment:
+      - ELASTIC_USERNAME=${GIO_ELASTICSEARCH_USERNAME}
+      - ELASTIC_PASSWORD=${GIO_ELASTICSEARCH_PASSWORD}
+      - http.host=0.0.0.0
+      - transport.host=0.0.0.0
+      - http.cors.enabled=true
+      - http.cors.allow-origin="*"      
+      - xpack.security.enabled=false
+      - cluster.name=elasticsearch
+      - bootstrap.memory_lock=true
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms1024m -Xmx1024m"
+
+    volumes:
+      - "/opt/service-center/gio/elasticsearch/data:/usr/share/elasticsearch/data"
+      - "/opt/service-center/gio/elasticsearch/logs:/usr/share/elasticsearch/logs"
+
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s 
+      placement:
+        constraints: [node.role == manager]
+
+      labels:
+        - traefik.enable=true
+        - traefik.network=service-public
+        - traefik.constraint-label=service-public
+        - traefik.docker.network=service-public
+
+        #HTTP
+        - traefik.http.middlewares.https-redirect.redirectscheme.scheme=https
+        - traefik.http.middlewares.https-redirect.redirectscheme.permanent=true
+
+        - traefik.http.routers.gio-elasticsearch-${GIO_ELASTICSEARCH_CLUSTER}-http.rule=Host(`${GIO_ELASTICSEARCH_APPLICATION}-${GIO_ELASTICSEARCH_CLUSTER}.${GIO_ELASTICSEARCH_DOMAIN}`)
+        - traefik.http.routers.gio-elasticsearch-${GIO_ELASTICSEARCH_CLUSTER}-http.entrypoints=http
+        - traefik.http.routers.gio-elasticsearch-${GIO_ELASTICSEARCH_CLUSTER}-http.middlewares=https-redirect
+        
+        #HTTPSp
+        - traefik.http.routers.gio-elasticsearch-${GIO_ELASTICSEARCH_CLUSTER}-https.rule=Host(`${GIO_ELASTICSEARCH_APPLICATION}-${GIO_ELASTICSEARCH_CLUSTER}.${GIO_ELASTICSEARCH_DOMAIN}`)
+        - traefik.http.routers.gio-elasticsearch-${GIO_ELASTICSEARCH_CLUSTER}-https.entrypoints=https
+        - traefik.http.routers.gio-elasticsearch-${GIO_ELASTICSEARCH_CLUSTER}-https.tls=true
+        
+        #Service
+        - traefik.http.routers.gio-elasticsearch-${GIO_ELASTICSEARCH_CLUSTER}-https.service=gio-elasticsearch-${GIO_ELASTICSEARCH_CLUSTER}
+
+        #Load Balance
+        - traefik.http.services.gio-elasticsearch-${GIO_ELASTICSEARCH_CLUSTER}.loadbalancer.server.port=9200
+    networks:
+      - service-public
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "7"       
+
+networks:
+  service-public:
+    external: true
+    name: service-public
+
+volumes:
+  data:

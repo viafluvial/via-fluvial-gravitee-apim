@@ -1,0 +1,3 @@
+title: Revisão de API aceita
+message: |
+  Revisão na API "${api.name}" foi aceita por ${user.displayName}.

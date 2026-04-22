@@ -1,0 +1,5 @@
+title: |
+  [${application.name}] Nova assinatura
+message: |
+  Uma nova assinatura foi solicitada para o plano "${plan.name}"
+  da API "${api.name}".

@@ -1,0 +1,14 @@
+<html>
+<body style="text-align: center;">
+<header>
+	<#include "header.html" />
+</header>
+<div style="margin-top: 50px; color: #424e5a;">
+	<h3>Olá,</h3>
+	<p>A assinatura do plano <b>${plan.name}</b> para a API <b>${api.name}</b> e a aplicação <b>${application.name}</b> foi fechada pela equipe da API.</p>
+	<#if plan.security == 'API_KEY'>
+		<p>As chaves de API foram revogadas e não podem mais ser usadas para consumir esta API.</p>
+	</#if>
+</div>
+</body>
+</html>

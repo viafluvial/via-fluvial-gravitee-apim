@@ -1,0 +1,19 @@
+<html>
+	<body style="text-align: center;">
+		<header>
+			<#include "header.html" />
+		</header>
+		<div style="margin-top: 50px; color: #424e5a;">
+			<h3>Olá,</h3>
+			<p>A aplicação <b>${application.name}</b> acabou de assinar a API <b>${api.name}</b> com plano <b>${plan.name}</b>.</p>
+			<#if plan.validation == 'MANUAL'>
+				<p>Esta assinatura precisa da sua aprovação<#if subscriptionsUrl?? && subscriptionsUrl != ''> <a href="${subscriptionsUrl}">aqui</a></#if>.</p>
+			</#if>
+
+			<#if subscription.request??>
+				<#if plan.commentMessage??>${plan.commentMessage}<#else>Mensagem</#if>
+				<p style="border: 1px solid grey; margin: 0 32px; padding: 16px; font-style: italic;">${subscription.request}</p>
+			</#if>
+      	</div>
+	</body>
+</html>

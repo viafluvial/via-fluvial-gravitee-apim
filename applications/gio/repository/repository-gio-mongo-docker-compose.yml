@@ -1,0 +1,62 @@
+version: '3.9'
+
+services:      
+  mongo:
+    image: mongo:${GIO_MONGODB_VERSION}
+
+    ports:
+      - target: 27017
+        published: 27017
+        protocol: tcp
+        mode: host
+
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${GIO_MONGO_USERNAME}
+      - MONGO_INITDB_ROOT_PASSWORD=${GIO_MONGO_PASSWORD}
+
+    volumes:
+      - "/opt/service-center/gio/mongo/data:/data/db"
+      - "/opt/service-center/gio/mongo/logs:/opt/mongodb/log"
+
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      placement:
+        constraints:
+          - node.role == manager
+
+      labels:
+        # General
+        - traefik.enable=true
+        - traefik.network=service-public
+        - traefik.constraint-label=service-public
+        - traefik.docker.network=service-public
+
+        # TCP
+        - traefik.tcp.routers.gio-mongo-${GIO_MONGO_CLUSTER}-tcp.entrypoints=mongo
+        - traefik.tcp.routers.gio-mongo-${GIO_MONGO_CLUSTER}-tcp.rule=HostSNI(`${GIO_MONGO_APPLICATION}-${GIO_MONGO_CLUSTER}.${GIO_MONGO_DOMAIN}`)
+        - traefik.tcp.routers.gio-mongo-${GIO_MONGO_CLUSTER}-tcp.tls=true
+        - traefik.tcp.routers.gio-mongo-${GIO_MONGO_CLUSTER}-tcp.service=gio-mongo-${GIO_MONGO_CLUSTER}
+        - traefik.tcp.services.gio-mongo-${GIO_MONGO_CLUSTER}.loadbalancer.server.port=27017
+
+    networks:
+      - service-public
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "7"
+
+networks:
+  service-public:
+    external: true
+    name: service-public
+
+volumes:
+  data:

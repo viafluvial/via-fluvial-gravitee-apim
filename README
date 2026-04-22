@@ -1,0 +1,93 @@
+# Gravitee APIM (GIO) - IaC On-Prem (Docker Swarm + Portainer)
+
+Este repositório segue a mesma estratégia operacional dos projetos de referência:
+
+- `docs/iac-onprem-cluster-swarm.zip` (bootstrap do cluster Swarm + Traefik + Portainer)
+- `docs/iac-onprem-keycloak.zip` (deploy de stacks via API do Portainer + interface `make stacks`)
+
+## Estrutura
+
+- `scripts/`: interface padrão (`iac.sh`, `deploy-stacks.sh`, `delete-stacks.sh`, `clean-*`, bootstrap local)
+- `ansible/`: playbooks e scripts IaC específicos do GIO (repository/management/gateway)
+- `applications/`: arquivos `docker-compose.yml` usados para stacks do Swarm
+
+## Ambientes (dsv / hml / prd)
+
+O `ENVIRONMENT` altera:
+
+- Qual inventário é usado (`ansible/config/inventory/<env>.ini` quando existir; fallback: `ansible/config/inventory.ini`)
+- Qual `--limit` é aplicado
+
+Em `prd`, os alvos são implantados em grupos distintos do inventário:
+
+- `repository` (Mongo/Elasticsearch/Kibana/Mongo-Express)
+- `management` (APIM Management API + Console + Portal)
+- `gateway` (APIM Gateway)
+
+Em `dsv` e `hml`, o alvo normalmente é um host único (grupo `dsv`/`hml`).
+
+## Deploy via Portainer API
+
+Os playbooks fazem deploy/atualização e remoção de stacks via API do Portainer (mesma estratégia do Keycloak), evitando `docker stack deploy` direto.
+
+Playbooks usados pelo fluxo `make stacks`:
+
+- Repository: `ansible/playbooks/gio/playbook-20C-*` / `20V-*` / `20D-*`
+- Management: `ansible/playbooks/gio/playbook-21C-*` / `21V-*` / `21D-*`
+- Gateway: `ansible/playbooks/gio/playbook-22C-*` / `22V-*` / `22D-*`
+- Clean operacional: `ansible/playbooks/gio/playbook-90C-clean-services.yml`
+
+Tasks reutilizáveis do Portainer ficam em `ansible/playbooks/gio/tasks/`.
+
+## Pré-requisitos
+
+1. Cluster Swarm + Traefik + Portainer já instalados (use o projeto `iac-onprem-cluster-swarm`).
+2. Ajuste os inventários e arquivos de Portainer:
+
+- `ansible/config/inventory.ini` (ou `ansible/config/inventory/dsv.ini`, `hml.ini`, `prd.ini`)
+- `ansible/config/portainer-repository.env`
+- `ansible/config/portainer-management.env`
+- `ansible/config/portainer-gateway.env`
+
+3. Ajuste os arquivos `.env` das stacks (em `ansible/playbooks/gio/`).
+
+## Como executar (interface padrão)
+
+Bootstrap local (se necessário):
+
+```bash
+make setup-local
+```
+
+Deploy completo (produção):
+
+```bash
+ENVIRONMENT=prd make stacks install platform
+```
+
+Deploy por alvo:
+
+```bash
+ENVIRONMENT=prd make stacks install repository
+ENVIRONMENT=prd make stacks install management
+ENVIRONMENT=prd make stacks install gateway
+```
+
+Validação de sintaxe dos playbooks:
+
+```bash
+ENVIRONMENT=prd make stacks check platform
+```
+
+Limpeza operacional (task history / force update):
+
+```bash
+ENVIRONMENT=prd TASK_HISTORY_LIMIT=1 make stacks clean platform
+```
+
+Remoção (protegida):
+
+```bash
+ENVIRONMENT=prd ALLOW_UNINSTALL=true make stacks uninstall platform
+```
+

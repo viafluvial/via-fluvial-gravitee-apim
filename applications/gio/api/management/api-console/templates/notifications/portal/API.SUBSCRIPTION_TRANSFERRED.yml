@@ -1,0 +1,5 @@
+title: |
+  [${api.name}] Assinatura transferida
+message: |
+  A assinatura do aplicativo "${application.name}"
+  do plano "${plan.name}" foi transferida.

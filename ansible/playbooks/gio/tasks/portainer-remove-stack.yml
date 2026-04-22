@@ -1,0 +1,44 @@
+---
+- name: Validar parâmetros de remoção da stack no Portainer
+  assert:
+    that:
+      - portainer_stack_name is defined
+      - portainer_stack_name | length > 0
+    fail_msg: "Parâmetro obrigatório ausente para remoção via Portainer API: portainer_stack_name."
+
+- name: Autenticar no Portainer para remoção
+  include_tasks: ./portainer-auth.yml
+
+- name: Listar stacks existentes no endpoint do Portainer
+  uri:
+    url: "{{ portainer_base_url }}/api/stacks?endpointId={{ portainer_endpoint_id_resolved }}"
+    method: GET
+    headers: "{{ portainer_headers }}"
+    return_content: true
+    status_code: 200
+    validate_certs: "{{ portainer_validate_certs_resolved }}"
+    timeout: "{{ portainer_api_timeout_resolved }}"
+  register: portainer_stacks_response
+  become: false
+  delegate_to: "{{ portainer_api_delegate_to_resolved }}"
+
+- name: Encontrar stack para remoção
+  set_fact:
+    portainer_stack_to_remove: "{{ (portainer_stacks_response.json | selectattr('Name', 'equalto', portainer_stack_name) | list | first) | default({}) }}"
+
+- name: Remover stack no Portainer quando encontrada
+  uri:
+    url: "{{ portainer_base_url }}/api/stacks/{{ portainer_stack_to_remove.Id }}?endpointId={{ portainer_endpoint_id_resolved }}"
+    method: DELETE
+    headers: "{{ portainer_headers }}"
+    status_code: [200, 204]
+    validate_certs: "{{ portainer_validate_certs_resolved }}"
+    timeout: "{{ portainer_api_timeout_resolved }}"
+  become: false
+  delegate_to: "{{ portainer_api_delegate_to_resolved }}"
+  when: portainer_stack_to_remove != {}
+
+- name: Informar quando stack não foi encontrada no Portainer
+  debug:
+    msg: "Stack {{ portainer_stack_name }} não encontrada no Portainer."
+  when: portainer_stack_to_remove == {}

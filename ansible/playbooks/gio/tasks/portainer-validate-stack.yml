@@ -1,0 +1,179 @@
+---
+- name: Validar parâmetros de validação da stack no Portainer
+  assert:
+    that:
+      - portainer_stack_name is defined
+      - portainer_stack_name | length > 0
+    fail_msg: "Parâmetro obrigatório ausente para validação via Portainer API: portainer_stack_name."
+
+- name: Definir parâmetros de retry para validação
+  set_fact:
+    portainer_validate_retries_resolved: "{{ (portainer_validate_retries | default('40', true)) | int }}"
+    portainer_validate_delay_resolved: "{{ (portainer_validate_delay | default('5', true)) | int }}"
+
+- name: Autenticar no Portainer para validação
+  include_tasks: ./portainer-auth.yml
+
+- name: Listar stacks existentes no endpoint do Portainer
+  uri:
+    url: "{{ portainer_base_url }}/api/stacks?endpointId={{ portainer_endpoint_id_resolved }}"
+    method: GET
+    headers: "{{ portainer_headers }}"
+    return_content: true
+    status_code: 200
+    validate_certs: "{{ portainer_validate_certs_resolved }}"
+    timeout: "{{ portainer_api_timeout_resolved }}"
+  register: portainer_stacks_response
+  become: false
+  delegate_to: "{{ portainer_api_delegate_to_resolved }}"
+
+- name: Garantir que a stack existe no Portainer
+  assert:
+    that:
+      - (portainer_stacks_response.json | selectattr('Name', 'equalto', portainer_stack_name) | list | length) > 0
+    fail_msg: "Stack {{ portainer_stack_name }} não encontrada no Portainer (endpoint {{ portainer_endpoint_id_resolved }})."
+
+- name: Aguardar serviços da stack ficarem saudáveis (running >= desired)
+  block:
+    - name: Listar serviços do Docker no endpoint do Portainer (com status)
+      uri:
+        url: "{{ portainer_base_url }}/api/endpoints/{{ portainer_endpoint_id_resolved }}/docker/services?status=true"
+        method: GET
+        headers: "{{ portainer_headers }}"
+        return_content: true
+        status_code: 200
+        validate_certs: "{{ portainer_validate_certs_resolved }}"
+        timeout: "{{ portainer_api_timeout_resolved }}"
+      register: portainer_services_response
+      become: false
+      delegate_to: "{{ portainer_api_delegate_to_resolved }}"
+      retries: "{{ portainer_validate_retries_resolved }}"
+      delay: "{{ portainer_validate_delay_resolved }}"
+      until: >-
+        {%- set services = [] -%}
+        {%- for s in (portainer_services_response.json | default([])) -%}
+          {%- if s.Spec is defined and s.Spec.Labels is defined and (s.Spec.Labels['com.docker.stack.namespace'] | default('')) == portainer_stack_name -%}
+            {%- set _ = services.append(s) -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {%- set bad = [] -%}
+        {%- for s in services -%}
+          {%- set desired = (
+            (s.Spec.Mode.Replicated.Replicas | default(1))
+            if (s.Spec.Mode is defined and s.Spec.Mode.Replicated is defined)
+            else 1
+          ) -%}
+          {%- set running = (s.ServiceStatus.RunningTasks | default(0)) -%}
+          {%- if (running | int) < (desired | int) -%}
+            {%- set _ = bad.append(s.Spec.Name | default('unknown')) -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ (services | length) > 0 and (bad | length) == 0 }}
+  rescue:
+    - name: Reconsultar serviços do Docker no endpoint do Portainer (com status) para diagnóstico
+      uri:
+        url: "{{ portainer_base_url }}/api/endpoints/{{ portainer_endpoint_id_resolved }}/docker/services?status=true"
+        method: GET
+        headers: "{{ portainer_headers }}"
+        return_content: true
+        status_code: 200
+        validate_certs: "{{ portainer_validate_certs_resolved }}"
+        timeout: "{{ portainer_api_timeout_resolved }}"
+      register: portainer_services_response
+      become: false
+      delegate_to: "{{ portainer_api_delegate_to_resolved }}"
+
+    - name: Filtrar serviços pertencentes à stack (diagnóstico)
+      set_fact:
+        portainer_stack_services: >-
+          {%- set services = [] -%}
+          {%- for s in (portainer_services_response.json | default([])) -%}
+            {%- if s.Spec is defined and s.Spec.Labels is defined and (s.Spec.Labels['com.docker.stack.namespace'] | default('')) == portainer_stack_name -%}
+              {%- set _ = services.append(s) -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ services }}
+
+    - name: Calcular serviços não saudáveis (diagnóstico)
+      set_fact:
+        portainer_bad_services: >-
+          {%- set bad = [] -%}
+          {%- for s in (portainer_stack_services | default([])) -%}
+            {%- set desired = (
+              (s.Spec.Mode.Replicated.Replicas | default(1))
+              if (s.Spec.Mode is defined and s.Spec.Mode.Replicated is defined)
+              else 1
+            ) -%}
+            {%- set running = (s.ServiceStatus.RunningTasks | default(0)) -%}
+            {%- if (running | int) < (desired | int) -%}
+              {%- set _ = bad.append(s.Spec.Name | default('unknown')) -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ bad }}
+
+    - name: Exibir resumo dos serviços não saudáveis
+      debug:
+        msg: >-
+          Stack {{ portainer_stack_name }} com serviços não saudáveis: {{ portainer_bad_services | default([]) }}
+
+    - name: Mostrar status do Swarm para serviços não saudáveis (docker service ps)
+      command: docker service ps --no-trunc {{ item }}
+      register: docker_service_ps
+      changed_when: false
+      failed_when: false
+      loop: "{{ portainer_bad_services | default([]) }}"
+      loop_control:
+        label: "{{ item }}"
+
+    - name: Exibir saída do docker service ps (diagnóstico)
+      debug:
+        var: docker_service_ps.results
+
+    - name: Falhar com mensagem explicativa após timeout
+      fail:
+        msg: >-
+          Timeout aguardando stack {{ portainer_stack_name }} ficar saudável no Portainer.
+          Serviços não saudáveis: {{ portainer_bad_services | default([]) }}
+
+- name: Filtrar serviços pertencentes à stack
+  set_fact:
+    portainer_stack_services: >-
+      {%- set services = [] -%}
+      {%- for s in (portainer_services_response.json | default([])) -%}
+        {%- if s.Spec is defined and s.Spec.Labels is defined and (s.Spec.Labels['com.docker.stack.namespace'] | default('')) == portainer_stack_name -%}
+          {%- set _ = services.append(s) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ services }}
+
+- name: Falhar se nenhum serviço foi encontrado para a stack
+  assert:
+    that:
+      - (portainer_stack_services | length) > 0
+    fail_msg: "Nenhum serviço encontrado para a stack {{ portainer_stack_name }} no endpoint."
+
+- name: Validar que os serviços estão saudáveis (running >= desired)
+  vars:
+    desired: >-
+      {{
+        (item.Spec.Mode.Replicated.Replicas | default(1))
+        if (item.Spec.Mode is defined and item.Spec.Mode.Replicated is defined)
+        else 1
+      }}
+    running: "{{ item.ServiceStatus.RunningTasks | default(0) }}"
+  assert:
+    that:
+      - running | int >= desired | int
+    fail_msg: "Serviço {{ item.Spec.Name }} não saudável: {{ running }}/{{ desired }} running."
+  loop: "{{ portainer_stack_services }}"
+  loop_control:
+    label: "{{ item.Spec.Name | default('unknown') }}"
+
+- name: Exibir resumo dos serviços
+  debug:
+    msg: >-
+      {{
+        portainer_stack_services
+        | map(attribute='Spec.Name')
+        | list
+      }}

@@ -1,0 +1,224 @@
+---
+- name: Instalar/atualizar stacks do Repository (Mongo/Elasticsearch/Kibana/Mongo-Express) via Portainer API
+  hosts: all
+  become: true
+
+  vars:
+    network_name: "service-public"
+    deployment_environment: "{{ lookup('env', 'ENVIRONMENT') | default('prd', true) }}"
+    gio_cluster_env_resolved: "{{ deployment_environment if deployment_environment in ['dsv', 'hml'] else '' }}"
+    gio_repository_ip_resolved: "{{ ansible_host | default(inventory_hostname) }}"
+
+  tasks:
+    - name: Verificar se Docker está instalado
+      command: docker --version
+      register: docker_version
+      failed_when: docker_version.rc != 0
+
+    - name: Verificar se Docker Swarm está ativo
+      command: docker info --format '{{ "{{" }}.Swarm.LocalNodeState{{ "}}" }}'
+      register: swarm_state
+      failed_when: swarm_state.stdout != "active"
+
+    - name: Verificar se a rede overlay externa existe
+      command: docker network inspect "{{ network_name }}"
+      register: network_check
+      changed_when: false
+      failed_when: false
+
+    - name: Garantir que a rede está disponível antes de prosseguir
+      fail:
+        msg: "A rede {{ network_name }} não existe. Crie-a no Swarm (ex.: traefik/cluster base) antes de instalar o GIO."
+      when: network_check.rc != 0
+
+    - name: Criar diretórios do Mongo
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - "/opt/service-center/gio/mongo"
+        - "/opt/service-center/gio/mongo/data"
+        - "/opt/service-center/gio/mongo/logs"
+
+    - name: Copiar compose do Mongo
+      copy:
+        src: "{{ playbook_dir }}/../../../applications/gio/repository/repository-gio-mongo-docker-compose.yml"
+        dest: "/opt/service-center/gio/mongo/docker-compose.yml"
+        mode: '0644'
+
+    - name: Copiar .env do Mongo
+      copy:
+        src: "{{ playbook_dir }}/.env.mongo"
+        dest: "/opt/service-center/gio/mongo/.env"
+        mode: '0644'
+
+    - name: Remover linhas vazias do .env (Mongo)
+      shell: "sed -i '/^$/d' /opt/service-center/gio/mongo/.env"
+      changed_when: true
+
+    - name: Ajustar SERVER_IP no .env (Mongo)
+      lineinfile:
+        path: "/opt/service-center/gio/mongo/.env"
+        regexp: '^SERVER_IP='
+        line: "SERVER_IP={{ gio_repository_ip_resolved }}"
+
+    - name: Ajustar cluster no .env (Mongo) em dsv/hml
+      lineinfile:
+        path: "/opt/service-center/gio/mongo/.env"
+        regexp: '^GIO_MONGO_CLUSTER='
+        line: "GIO_MONGO_CLUSTER={{ gio_cluster_env_resolved }}"
+      when: gio_cluster_env_resolved | length > 0
+
+    - name: Deploy stack gio_mongo via Portainer API
+      include_tasks: ./tasks/portainer-deploy-stack.yml
+      vars:
+        portainer_stack_name: "gio_mongo"
+        portainer_compose_path: "/opt/service-center/gio/mongo/docker-compose.yml"
+        portainer_env_path: "/opt/service-center/gio/mongo/.env"
+        portainer_recreate_existing_stack: true
+
+    - name: Criar diretórios do Elasticsearch
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - "/opt/service-center/gio/elasticsearch"
+        - "/opt/service-center/gio/elasticsearch/data"
+        - "/opt/service-center/gio/elasticsearch/logs"
+
+    - name: Ajustar permissões dos diretórios (Elasticsearch)
+      command: "{{ item }}"
+      loop:
+        - chmod -R g+rwx /opt/service-center/gio/elasticsearch/data
+        - chgrp -R 0 /opt/service-center/gio/elasticsearch/data
+        - chmod -R g+rwx /opt/service-center/gio/elasticsearch/logs
+        - chgrp -R 0 /opt/service-center/gio/elasticsearch/logs
+      changed_when: true
+
+    - name: Copiar compose do Elasticsearch
+      copy:
+        src: "{{ playbook_dir }}/../../../applications/gio/repository/repository-gio-elasticsearch-docker-compose.yml"
+        dest: "/opt/service-center/gio/elasticsearch/docker-compose.yml"
+        mode: '0644'
+
+    - name: Copiar .env do Elasticsearch
+      copy:
+        src: "{{ playbook_dir }}/.env.elasticsearch"
+        dest: "/opt/service-center/gio/elasticsearch/.env"
+        mode: '0644'
+
+    - name: Remover linhas vazias do .env (Elasticsearch)
+      shell: "sed -i '/^$/d' /opt/service-center/gio/elasticsearch/.env"
+      changed_when: true
+
+    - name: Ajustar SERVER_IP no .env (Elasticsearch)
+      lineinfile:
+        path: "/opt/service-center/gio/elasticsearch/.env"
+        regexp: '^SERVER_IP='
+        line: "SERVER_IP={{ gio_repository_ip_resolved }}"
+
+    - name: Ajustar cluster no .env (Elasticsearch) em dsv/hml
+      lineinfile:
+        path: "/opt/service-center/gio/elasticsearch/.env"
+        regexp: '^GIO_ELASTICSEARCH_CLUSTER='
+        line: "GIO_ELASTICSEARCH_CLUSTER={{ gio_cluster_env_resolved }}"
+      when: gio_cluster_env_resolved | length > 0
+
+    - name: Deploy stack gio_elasticsearch via Portainer API
+      include_tasks: ./tasks/portainer-deploy-stack.yml
+      vars:
+        portainer_stack_name: "gio_elasticsearch"
+        portainer_compose_path: "/opt/service-center/gio/elasticsearch/docker-compose.yml"
+        portainer_env_path: "/opt/service-center/gio/elasticsearch/.env"
+        portainer_recreate_existing_stack: true
+
+    - name: Criar diretórios do Kibana
+      file:
+        path: "/opt/service-center/gio/kibana"
+        state: directory
+        mode: '0755'
+
+    - name: Copiar compose do Kibana
+      copy:
+        src: "{{ playbook_dir }}/../../../applications/gio/repository/reporitory-gio-kibana-docker-compose.yml"
+        dest: "/opt/service-center/gio/kibana/docker-compose.yml"
+        mode: '0644'
+
+    - name: Copiar .env do Kibana
+      copy:
+        src: "{{ playbook_dir }}/.env.kibana"
+        dest: "/opt/service-center/gio/kibana/.env"
+        mode: '0644'
+
+    - name: Remover linhas vazias do .env (Kibana)
+      shell: "sed -i '/^$/d' /opt/service-center/gio/kibana/.env"
+      changed_when: true
+
+    - name: Ajustar SERVER_IP no .env (Kibana)
+      lineinfile:
+        path: "/opt/service-center/gio/kibana/.env"
+        regexp: '^SERVER_IP='
+        line: "SERVER_IP={{ gio_repository_ip_resolved }}"
+
+    - name: Ajustar clusters no .env (Kibana) em dsv/hml
+      lineinfile:
+        path: "/opt/service-center/gio/kibana/.env"
+        regexp: "^{{ item }}="
+        line: "{{ item }}={{ gio_cluster_env_resolved }}"
+      loop:
+        - GIO_KIBANA_CLUSTER
+        - GIO_ELASTICSEARCH_CLUSTER
+      when: gio_cluster_env_resolved | length > 0
+
+    - name: Deploy stack gio_kibana via Portainer API
+      include_tasks: ./tasks/portainer-deploy-stack.yml
+      vars:
+        portainer_stack_name: "gio_kibana"
+        portainer_compose_path: "/opt/service-center/gio/kibana/docker-compose.yml"
+        portainer_env_path: "/opt/service-center/gio/kibana/.env"
+        portainer_recreate_existing_stack: true
+
+    - name: Criar diretórios do Mongo Express
+      file:
+        path: "/opt/service-center/gio/mongo-express"
+        state: directory
+        mode: '0755'
+
+    - name: Copiar compose do Mongo Express
+      copy:
+        src: "{{ playbook_dir }}/../../../applications/gio/repository/repository-gio-mongo-express-docker-compose.yml"
+        dest: "/opt/service-center/gio/mongo-express/docker-compose.yml"
+        mode: '0644'
+
+    - name: Copiar .env do Mongo Express
+      copy:
+        src: "{{ playbook_dir }}/.env.mongo-express"
+        dest: "/opt/service-center/gio/mongo-express/.env"
+        mode: '0644'
+
+    - name: Remover linhas vazias do .env (Mongo Express)
+      shell: "sed -i '/^$/d' /opt/service-center/gio/mongo-express/.env"
+      changed_when: true
+
+    - name: Ajustar SERVER_IP no .env (Mongo Express)
+      lineinfile:
+        path: "/opt/service-center/gio/mongo-express/.env"
+        regexp: '^SERVER_IP='
+        line: "SERVER_IP={{ gio_repository_ip_resolved }}"
+
+    - name: Ajustar cluster no .env (Mongo Express) em dsv/hml
+      lineinfile:
+        path: "/opt/service-center/gio/mongo-express/.env"
+        regexp: '^GIO_MONGO_EXPRESS_CLUSTER='
+        line: "GIO_MONGO_EXPRESS_CLUSTER={{ gio_cluster_env_resolved }}"
+      when: gio_cluster_env_resolved | length > 0
+
+    - name: Deploy stack gio_mongo_express via Portainer API
+      include_tasks: ./tasks/portainer-deploy-stack.yml
+      vars:
+        portainer_stack_name: "gio_mongo_express"
+        portainer_compose_path: "/opt/service-center/gio/mongo-express/docker-compose.yml"
+        portainer_env_path: "/opt/service-center/gio/mongo-express/.env"
+        portainer_recreate_existing_stack: true

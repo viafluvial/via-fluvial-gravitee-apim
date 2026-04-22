@@ -1,0 +1,5 @@
+title: Novo ticket de suporte
+message: >
+  "${user.displayName}" criou um ticket.
+  <#if api??> A API selecionada é ${api.name}.</#if>
+  <#if application??> O aplicativo selecionado é ${application.name}.</#if>

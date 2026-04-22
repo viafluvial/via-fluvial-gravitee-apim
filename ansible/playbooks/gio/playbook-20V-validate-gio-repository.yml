@@ -1,0 +1,25 @@
+---
+- name: Validar stacks do Repository via Portainer API
+  hosts: all
+  become: true
+
+  tasks:
+    - name: Validar stack gio_mongo
+      include_tasks: ./tasks/portainer-validate-stack.yml
+      vars:
+        portainer_stack_name: "gio_mongo"
+
+    - name: Validar stack gio_elasticsearch
+      include_tasks: ./tasks/portainer-validate-stack.yml
+      vars:
+        portainer_stack_name: "gio_elasticsearch"
+
+    - name: Validar stack gio_kibana
+      include_tasks: ./tasks/portainer-validate-stack.yml
+      vars:
+        portainer_stack_name: "gio_kibana"
+
+    - name: Validar stack gio_mongo_express
+      include_tasks: ./tasks/portainer-validate-stack.yml
+      vars:
+        portainer_stack_name: "gio_mongo_express"

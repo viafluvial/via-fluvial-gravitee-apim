@@ -1,0 +1,18 @@
+---
+- name: Remover stack Gateway via Portainer API
+  hosts: all
+  become: true
+
+  vars:
+    gio_directory: "/opt/service-center/gio/gateway"
+
+  tasks:
+    - name: Remover stack gio_gateway
+      include_tasks: ./tasks/portainer-remove-stack.yml
+      vars:
+        portainer_stack_name: "gio_gateway"
+
+    - name: Remover diretório do Gateway (opcional)
+      file:
+        path: "{{ gio_directory }}"
+        state: absent

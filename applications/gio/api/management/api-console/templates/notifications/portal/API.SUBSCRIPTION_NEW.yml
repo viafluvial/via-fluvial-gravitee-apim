@@ -1,0 +1,5 @@
+title: |
+  [${api.name}] Assinatura criada
+message: |
+  A aplicação "${application.name}" solicitou uma assinatura
+  para o plano "${plan.name}".

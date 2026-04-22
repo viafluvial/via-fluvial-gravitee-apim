@@ -1,0 +1,3 @@
+title: Criação de novo usuário
+message: |
+  "${user.firstname} ${user.lastname}" foi criado.

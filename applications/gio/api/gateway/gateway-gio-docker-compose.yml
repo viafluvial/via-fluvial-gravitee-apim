@@ -1,0 +1,69 @@
+version: '3.9'
+
+services:
+
+  api-gateway:
+    image: graviteeio/apim-gateway:${GIO_APIM_VERSION}
+
+    restart: always
+    
+    ports:
+      - "8082:8082"
+    
+    volumes:
+      - "/opt/service-center/gio/gateway/api-gateway/logs:/opt/graviteeio-gateway/logs"
+    
+    environment:
+      - TZ=America/Manaus
+      
+      - gravitee_management_mongodb_uri=mongodb://${GIO_MONGO_USERNAME}:${GIO_MONGO_PASSWORD}@${SERVER_IP}/gravitee?authSource=admin&serverSelectionTimeoutMS=5000&connectTimeoutMS=5000&socketTimeoutMS=5000
+      - gravitee_ratelimit_mongodb_uri=mongodb://${GIO_MONGO_USERNAME}:${GIO_MONGO_PASSWORD}@${SERVER_IP}/gravitee?authSource=admin&serverSelectionTimeoutMS=5000&connectTimeoutMS=5000&socketTimeoutMS=5000
+      
+      - gravitee_reporters_elasticsearch_endpoints_0=http://${SERVER_IP}:9200
+      - gravitee_reporters_elasticsearch_security_username=${GIO_ELASTICSEARCH_USERNAME}
+      - gravitee_reporters_elasticsearch_security_password=${GIO_ELASTICSEARCH_PASSWORD}
+       
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s 
+      placement:
+        constraints: [node.role == manager]
+
+      labels:
+        #General
+        - traefik.enable=true
+        - traefik.network=service-public
+        - traefik.constraint-label=service-public
+        - traefik.docker.network=service-public
+        
+        #HTTP
+        - traefik.http.middlewares.https-redirect.redirectscheme.scheme=https
+        - traefik.http.middlewares.https-redirect.redirectscheme.permanent=true
+
+        - traefik.http.routers.gio-api-gateway-${GIO_API_GATEWAY_CLUSTER}-http.rule=Host(`${GIO_API_GATEWAY_APPLICATION}-${GIO_API_GATEWAY_CLUSTER}.${GIO_API_GATEWAY_DOMAIN}`)
+        - traefik.http.routers.gio-api-gateway-${GIO_API_GATEWAY_CLUSTER}-http.entrypoints=http
+        - traefik.http.routers.gio-api-gateway-${GIO_API_GATEWAY_CLUSTER}-http.middlewares=https-redirect
+        
+        #HTTPSp
+        - traefik.http.routers.gio-api-gateway-${GIO_API_GATEWAY_CLUSTER}-https.rule=Host(`${GIO_API_GATEWAY_APPLICATION}-${GIO_API_GATEWAY_CLUSTER}.${GIO_API_GATEWAY_DOMAIN}`)
+        - traefik.http.routers.gio-api-gateway-${GIO_API_GATEWAY_CLUSTER}-https.entrypoints=https
+        - traefik.http.routers.gio-api-gateway-${GIO_API_GATEWAY_CLUSTER}-https.tls=true
+        
+        #Service
+        - traefik.http.routers.gio-api-gateway-${GIO_API_GATEWAY_CLUSTER}-https.service=gio-api-gateway-${GIO_API_GATEWAY_CLUSTER}
+
+        #Load Balance
+        - traefik.http.services.gio-api-gateway-${GIO_API_GATEWAY_CLUSTER}.loadbalancer.server.port=8082
+
+    networks:
+      - service-public
+
+networks:
+  service-public:
+    external: true
+    name: service-public

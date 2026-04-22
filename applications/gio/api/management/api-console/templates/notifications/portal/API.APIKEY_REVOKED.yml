@@ -1,0 +1,5 @@
+title: |
+  [${api.name}] Chave de API revogada
+message: |
+  Uma chave de API foi revogada para o plano "${plan.name}" 
+  e aplicação "${application.name}".

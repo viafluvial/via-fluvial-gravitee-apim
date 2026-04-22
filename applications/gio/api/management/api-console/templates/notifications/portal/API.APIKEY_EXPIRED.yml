@@ -1,0 +1,5 @@
+title: |
+  [${api.name}] Chave de API expirada
+message: |
+  Uma chave de API expirou para o plano "${plan.name}" 
+  e aplicação "${application.name}".

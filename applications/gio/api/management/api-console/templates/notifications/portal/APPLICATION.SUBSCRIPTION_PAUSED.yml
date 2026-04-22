@@ -1,0 +1,5 @@
+title: |
+  [${application.name}] Assinatura pausada
+message: |
+  A solicitação de assinatura do plano "${plan.name}" 
+  da API "${api.name}" foi pausada.
