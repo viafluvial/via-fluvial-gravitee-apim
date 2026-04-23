@@ -5,6 +5,9 @@
 
   vars:
     gio_directory: "/opt/service-center/gio/mongo"
+    # Segurança: por padrão NÃO remove o diretório com dados.
+    # Para remover também os dados, execute com: -e gio_remove_data_directories=true
+    gio_remove_data_directories: false
 
   tasks:
 
@@ -38,9 +41,11 @@
         owner: root
         group: root
       ignore_errors: true
+      when: gio_remove_data_directories | bool
 
     ### BLOCO 3: Remoção do Diretório ###
     - name: Remover diretório completo do GIO Mongo
       file:
         path: "{{ gio_directory }}"
         state: absent
+      when: gio_remove_data_directories | bool

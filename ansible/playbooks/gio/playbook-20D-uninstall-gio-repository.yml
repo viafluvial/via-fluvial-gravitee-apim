@@ -3,6 +3,11 @@
   hosts: all
   become: true
 
+  vars:
+    # Segurança: por padrão NÃO remove os diretórios que armazenam dados (Mongo/Elasticsearch).
+    # Para remover também os dados, execute com: -e gio_remove_repository_directories=true
+    gio_remove_repository_directories: false
+
   tasks:
     - name: Remover stack gio_mongo_express
       include_tasks: ./tasks/portainer-remove-stack.yml
@@ -33,3 +38,4 @@
         - "/opt/service-center/gio/kibana"
         - "/opt/service-center/gio/elasticsearch"
         - "/opt/service-center/gio/mongo"
+      when: gio_remove_repository_directories | bool

@@ -150,7 +150,7 @@
         body_format: json
         body:
           Name: "{{ portainer_stack_name }}"
-          StackFileContent: "{{ portainer_compose_file.content | b64decode }}"
+          StackFileContent: "{{ (portainer_compose_file.content | b64decode) | regex_replace('\\r\\n', '\\n') | regex_replace('\\r', '') }}"
           Env: "{{ portainer_stack_env }}"
           SwarmID: "{{ portainer_swarm_response.json.ID }}"
           FromAppTemplate: false
@@ -168,7 +168,7 @@
         body_format: json
         body:
           Name: "{{ portainer_stack_name }}"
-          StackFileContent: "{{ portainer_compose_file.content | b64decode }}"
+          StackFileContent: "{{ (portainer_compose_file.content | b64decode) | regex_replace('\\r\\n', '\\n') | regex_replace('\\r', '') }}"
           Env: "{{ portainer_stack_env }}"
           SwarmID: "{{ portainer_swarm_response.json.ID }}"
           FromAppTemplate: false
@@ -203,7 +203,7 @@
         body_format: json
         body:
           Name: "{{ portainer_stack_name }}"
-          StackFileContent: "{{ portainer_compose_file.content | b64decode }}"
+          StackFileContent: "{{ (portainer_compose_file.content | b64decode) | regex_replace('\\r\\n', '\\n') | regex_replace('\\r', '') }}"
           Env: "{{ portainer_stack_env }}"
           SwarmID: "{{ portainer_swarm_response.json.ID }}"
           FromAppTemplate: false
@@ -221,7 +221,7 @@
         body_format: json
         body:
           Name: "{{ portainer_stack_name }}"
-          StackFileContent: "{{ portainer_compose_file.content | b64decode }}"
+          StackFileContent: "{{ (portainer_compose_file.content | b64decode) | regex_replace('\\r\\n', '\\n') | regex_replace('\\r', '') }}"
           Env: "{{ portainer_stack_env }}"
           SwarmID: "{{ portainer_swarm_response.json.ID }}"
           FromAppTemplate: false
@@ -241,7 +241,7 @@
     headers: "{{ portainer_headers }}"
     body_format: json
     body:
-      StackFileContent: "{{ portainer_compose_file.content | b64decode }}"
+      StackFileContent: "{{ (portainer_compose_file.content | b64decode) | regex_replace('\\r\\n', '\\n') | regex_replace('\\r', '') }}"
       Env: "{{ portainer_stack_env }}"
       Prune: true
     status_code: [200, 201, 202]

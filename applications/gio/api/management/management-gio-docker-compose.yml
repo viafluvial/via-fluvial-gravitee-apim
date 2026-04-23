@@ -12,6 +12,7 @@ services:
 
     volumes:    
       - "/opt/service-center/gio/management/api-console/plugins:/opt/graviteeio-management-api/plugins-ext"
+      - "/opt/service-center/gio/management/api-console/templates:/opt/graviteeio-management-api/templates:ro"
       
     environment:
       - TZ=America/Manaus
@@ -31,10 +32,10 @@ services:
       - gravitee_plugins_path_0=/opt/graviteeio-management-api/plugins
       - gravitee_plugins_path_1=/opt/graviteeio-management-api/plugins-ext
       
-      #- gravitee_email_enabled=True
-      #- gravitee_email_host=${GIO_SMTP_TJAM_DOMAIN}
-      #- gravitee_email_port=${GIO_SMTP_PORT}
-      #- gravitee_email_from=GIO_SMTP_FROM}
+      - gravitee_email_enabled=True
+      - gravitee_email_host=${GIO_SMTP_TJAM_DOMAIN}
+      - gravitee_email_port=${GIO_SMTP_PORT}
+      - gravitee_email_from=${GIO_SMTP_FROM}
       #- gravitee_email_username=${GIO_SMTP_USER}
       #- gravitee_email_password=${GIO_SMTP_PASSWORD}
    
@@ -132,7 +133,7 @@ services:
       - service-public
 
   portal:
-    image: graviteeio/apim-portal-ui:${GIO_APIM_VERSION}
+    image: ${GIO_PORTAL_UI_IMAGE}
 
     restart: always
     

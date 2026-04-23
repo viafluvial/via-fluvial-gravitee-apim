@@ -97,6 +97,13 @@
         - { src: "{{ playbook_dir }}/../../../applications/gio/api/management/portal/logs/error.log", dest: "{{ gio_directory }}/portal/logs/error.log" }
       ignore_errors: true
 
+    - name: Copiar templates de e-mail do APIM (api-console)
+      copy:
+        src: "{{ playbook_dir }}/../../../applications/gio/api/management/api-console/templates/"
+        dest: "{{ gio_directory }}/api-console/templates/"
+        mode: '0644'
+        directory_mode: '0755'
+
     - name: Deploy stack gio_management via Portainer API
       include_tasks: ./tasks/portainer-deploy-stack.yml
       vars:
