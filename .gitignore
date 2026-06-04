@@ -14,3 +14,6 @@
 
 # Ansible vault temp artifacts
 *.retry
+.terraform/
+**/.terraform/
+.terraform.lock.hcl
