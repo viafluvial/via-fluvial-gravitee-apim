@@ -16,10 +16,10 @@ services:
     environment:
       - TZ=America/Manaus
       
-      - gravitee_management_mongodb_uri=mongodb://${GIO_MONGO_USERNAME}:${GIO_MONGO_PASSWORD}@${SERVER_IP}/gravitee?authSource=admin&serverSelectionTimeoutMS=5000&connectTimeoutMS=5000&socketTimeoutMS=5000
-      - gravitee_ratelimit_mongodb_uri=mongodb://${GIO_MONGO_USERNAME}:${GIO_MONGO_PASSWORD}@${SERVER_IP}/gravitee?authSource=admin&serverSelectionTimeoutMS=5000&connectTimeoutMS=5000&socketTimeoutMS=5000
+      - gravitee_management_mongodb_uri=mongodb://${GIO_MONGO_USERNAME}:${GIO_MONGO_PASSWORD}@${GIO_MONGO_HOST}/gravitee?authSource=admin&serverSelectionTimeoutMS=5000&connectTimeoutMS=5000&socketTimeoutMS=5000
+      - gravitee_ratelimit_mongodb_uri=mongodb://${GIO_MONGO_USERNAME}:${GIO_MONGO_PASSWORD}@${GIO_MONGO_HOST}/gravitee?authSource=admin&serverSelectionTimeoutMS=5000&connectTimeoutMS=5000&socketTimeoutMS=5000
       
-      - gravitee_reporters_elasticsearch_endpoints_0=http://${SERVER_IP}:9200
+      - gravitee_reporters_elasticsearch_endpoints_0=http://${GIO_ELASTICSEARCH_HOST}:9200
       - gravitee_reporters_elasticsearch_security_username=${GIO_ELASTICSEARCH_USERNAME}
       - gravitee_reporters_elasticsearch_security_password=${GIO_ELASTICSEARCH_PASSWORD}
        
@@ -45,14 +45,15 @@ services:
         - traefik.http.middlewares.https-redirect.redirectscheme.scheme=https
         - traefik.http.middlewares.https-redirect.redirectscheme.permanent=true
 
-        - traefik.http.routers.gio-api-gateway-${GIO_API_GATEWAY_CLUSTER}-http.rule=Host(`${GIO_API_GATEWAY_APPLICATION}-${GIO_API_GATEWAY_CLUSTER}.${GIO_API_GATEWAY_DOMAIN}`)
+        - traefik.http.routers.gio-api-gateway-${GIO_API_GATEWAY_CLUSTER}-http.rule=Host(`${GIO_API_GATEWAY_APPLICATION}.${GIO_API_GATEWAY_CLUSTER}.${GIO_DOMAIN_BASE}`)
         - traefik.http.routers.gio-api-gateway-${GIO_API_GATEWAY_CLUSTER}-http.entrypoints=http
         - traefik.http.routers.gio-api-gateway-${GIO_API_GATEWAY_CLUSTER}-http.middlewares=https-redirect
         
         #HTTPSp
-        - traefik.http.routers.gio-api-gateway-${GIO_API_GATEWAY_CLUSTER}-https.rule=Host(`${GIO_API_GATEWAY_APPLICATION}-${GIO_API_GATEWAY_CLUSTER}.${GIO_API_GATEWAY_DOMAIN}`)
+        - traefik.http.routers.gio-api-gateway-${GIO_API_GATEWAY_CLUSTER}-https.rule=Host(`${GIO_API_GATEWAY_APPLICATION}.${GIO_API_GATEWAY_CLUSTER}.${GIO_DOMAIN_BASE}`)
         - traefik.http.routers.gio-api-gateway-${GIO_API_GATEWAY_CLUSTER}-https.entrypoints=https
         - traefik.http.routers.gio-api-gateway-${GIO_API_GATEWAY_CLUSTER}-https.tls=true
+        - traefik.http.routers.gio-api-gateway-${GIO_API_GATEWAY_CLUSTER}-https.tls.certresolver=letsencrypt
         
         #Service
         - traefik.http.routers.gio-api-gateway-${GIO_API_GATEWAY_CLUSTER}-https.service=gio-api-gateway-${GIO_API_GATEWAY_CLUSTER}

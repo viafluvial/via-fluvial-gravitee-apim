@@ -4,6 +4,7 @@
     portainer_base_url: "{{ (portainer_url | default(lookup('env', 'PORTAINER_URL'), true)) | regex_replace('/$', '') }}"
     portainer_endpoint_id_resolved: "{{ portainer_endpoint_id | default(lookup('env', 'PORTAINER_ENDPOINT_ID'), true) }}"
     portainer_endpoint_name_resolved: "{{ portainer_endpoint_name | default(lookup('env', 'PORTAINER_ENDPOINT_NAME'), true) }}"
+    portainer_expected_endpoint_name_resolved: "{{ portainer_expected_endpoint_name | default(lookup('env', 'PORTAINER_EXPECTED_ENDPOINT_NAME'), true) }}"
     portainer_api_key_resolved: "{{ portainer_api_key | default(lookup('env', 'PORTAINER_API_KEY'), true) }}"
     portainer_username_resolved: "{{ portainer_username | default(lookup('env', 'PORTAINER_USERNAME'), true) }}"
     portainer_password_resolved: "{{ portainer_password | default(lookup('env', 'PORTAINER_PASSWORD'), true) }}"
@@ -17,7 +18,7 @@
       - portainer_base_url is defined
       - portainer_base_url | length > 0
       - (portainer_endpoint_id_resolved is defined and (portainer_endpoint_id_resolved | string | length > 0)) or (portainer_endpoint_name_resolved is defined and (portainer_endpoint_name_resolved | string | length > 0))
-    fail_msg: "Defina PORTAINER_URL e PORTAINER_ENDPOINT_ID ou PORTAINER_ENDPOINT_NAME (via ansible/config/portainer-*.env carregado pelo wrapper, ou variáveis de ambiente)."
+    fail_msg: "Defina PORTAINER_URL e PORTAINER_ENDPOINT_ID ou PORTAINER_ENDPOINT_NAME (via gcp/config/portainer-*.env carregado pelo wrapper, ou variáveis de ambiente)."
 
 - name: Validar credencial da API do Portainer
   assert:
@@ -128,3 +129,29 @@
       - portainer_endpoint_id_resolved is defined
       - (portainer_endpoint_id_resolved | string | length) > 0
     fail_msg: "Não foi possível resolver PORTAINER_ENDPOINT_ID. Verifique PORTAINER_ENDPOINT_NAME/ID no arquivo env."
+
+- name: Obter metadados do endpoint resolvido
+  set_fact:
+    portainer_resolved_endpoint: >-
+      {{
+        (
+          portainer_endpoints_response.json
+          | selectattr('Id', 'equalto', (portainer_endpoint_id_resolved | int))
+          | list
+          | first
+        ) | default({})
+      }}
+
+- name: Validar endpoint esperado por cluster (segurança anti-deploy cruzado)
+  assert:
+    that:
+      - portainer_resolved_endpoint != {}
+      - portainer_resolved_endpoint.Name is defined
+      - (portainer_resolved_endpoint.Name | lower) == (portainer_expected_endpoint_name_resolved | lower)
+    fail_msg: >-
+      Endpoint resolvido no Portainer nao corresponde ao cluster esperado.
+      Esperado: {{ portainer_expected_endpoint_name_resolved }} | Resolvido: {{ portainer_resolved_endpoint.Name | default('desconhecido') }}.
+      Ajuste PORTAINER_ENDPOINT_NAME/ID no arquivo env do cluster.
+  when:
+    - portainer_expected_endpoint_name_resolved is defined
+    - (portainer_expected_endpoint_name_resolved | string | length) > 0

@@ -1,0 +1,10 @@
+project_id = "viafluvial-prd"
+region     = "southamerica-east1"
+network    = "vpc-plataforma-prd"
+
+repository_subnet_cidrs = ["10.10.10.0/24"]
+management_subnet_cidrs = ["10.10.20.0/24"]
+gateway_subnet_cidrs    = ["10.10.30.0/24"]
+
+repository_target_tags = ["swarm-repository"]
+management_target_tags = ["swarm-management"]

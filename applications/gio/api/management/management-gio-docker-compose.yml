@@ -17,15 +17,15 @@ services:
     environment:
       - TZ=America/Manaus
 
-      - gravitee_management_mongodb_uri=mongodb://${GIO_MONGO_USERNAME}:${GIO_MONGO_PASSWORD}@${SERVER_IP}/gravitee?authSource=admin&serverSelectionTimeoutMS=5000&connectTimeoutMS=5000&socketTimeoutMS=5000
-      - gravitee_ratelimit_mongodb_uri=mongodb://${GIO_MONGO_USERNAME}:${GIO_MONGO_PASSWORD}@${SERVER_IP}/gravitee?authSource=admin&serverSelectionTimeoutMS=5000&connectTimeoutMS=5000&socketTimeoutMS=5000
-      - gravitee_installation_standalone_portal_url=https://${GIO_PORTAL_APPLICATION}-${GIO_PORTAL_CLUSTER}.${GIO_PORTAL_DOMAIN}
+      - gravitee_management_mongodb_uri=mongodb://${GIO_MONGO_USERNAME}:${GIO_MONGO_PASSWORD}@${GIO_MONGO_HOST}/gravitee?authSource=admin&serverSelectionTimeoutMS=5000&connectTimeoutMS=5000&socketTimeoutMS=5000
+      - gravitee_ratelimit_mongodb_uri=mongodb://${GIO_MONGO_USERNAME}:${GIO_MONGO_PASSWORD}@${GIO_MONGO_HOST}/gravitee?authSource=admin&serverSelectionTimeoutMS=5000&connectTimeoutMS=5000&socketTimeoutMS=5000
+      - gravitee_installation_standalone_portal_url=${GIO_PORTAL_UI_URL}
 
-      - gravitee_analytics_elasticsearch_endpoints_0=http://${SERVER_IP}:9200
+      - gravitee_analytics_elasticsearch_endpoints_0=http://${GIO_ELASTICSEARCH_HOST}:9200
       - gravitee_analytics_elasticsearch_security_username=${GIO_ELASTICSEARCH_USERNAME}
       - gravitee_analytics_elasticsearch_security_password=${GIO_ELASTICSEARCH_PASSWORD}
 
-      - gravitee_reporters_elasticsearch_endpoints_0=http://${SERVER_IP}:9200
+      - gravitee_reporters_elasticsearch_endpoints_0=http://${GIO_ELASTICSEARCH_HOST}:9200
       - gravitee_reporters_elasticsearch_security_username=${GIO_ELASTICSEARCH_USERNAME}
       - gravitee_reporters_elasticsearch_security_password=${GIO_ELASTICSEARCH_PASSWORD}
 
@@ -33,7 +33,7 @@ services:
       - gravitee_plugins_path_1=/opt/graviteeio-management-api/plugins-ext
       
       - gravitee_email_enabled=True
-      - gravitee_email_host=${GIO_SMTP_TJAM_DOMAIN}
+      - gravitee_email_host=${GIO_SMTP_HOST}
       - gravitee_email_port=${GIO_SMTP_PORT}
       - gravitee_email_from=${GIO_SMTP_FROM}
       #- gravitee_email_username=${GIO_SMTP_USER}
@@ -61,14 +61,15 @@ services:
         - traefik.http.middlewares.https-redirect.redirectscheme.scheme=https
         - traefik.http.middlewares.https-redirect.redirectscheme.permanent=true
 
-        - traefik.http.routers.gio-api-console-${GIO_API_CONSOLE_CLUSTER}-http.rule=Host(`${GIO_API_CONSOLE_APPLICATION}-${GIO_API_CONSOLE_CLUSTER}.${GIO_API_CONSOLE_DOMAIN}`)
+        - traefik.http.routers.gio-api-console-${GIO_API_CONSOLE_CLUSTER}-http.rule=Host(`${GIO_API_CONSOLE_APPLICATION}.${GIO_API_CONSOLE_CLUSTER}.${GIO_DOMAIN_BASE}`)
         - traefik.http.routers.gio-api-console-${GIO_API_CONSOLE_CLUSTER}-http.entrypoints=http
         - traefik.http.routers.gio-api-console-${GIO_API_CONSOLE_CLUSTER}-http.middlewares=https-redirect
         
         #HTTPS
-        - traefik.http.routers.gio-api-console-${GIO_API_CONSOLE_CLUSTER}-https.rule=Host(`${GIO_API_CONSOLE_APPLICATION}-${GIO_API_CONSOLE_CLUSTER}.${GIO_API_CONSOLE_DOMAIN}`)
+        - traefik.http.routers.gio-api-console-${GIO_API_CONSOLE_CLUSTER}-https.rule=Host(`${GIO_API_CONSOLE_APPLICATION}.${GIO_API_CONSOLE_CLUSTER}.${GIO_DOMAIN_BASE}`)
         - traefik.http.routers.gio-api-console-${GIO_API_CONSOLE_CLUSTER}-https.entrypoints=https
         - traefik.http.routers.gio-api-console-${GIO_API_CONSOLE_CLUSTER}-https.tls=true
+        - traefik.http.routers.gio-api-console-${GIO_API_CONSOLE_CLUSTER}-https.tls.certresolver=letsencrypt
         
         #Service
         - traefik.http.routers.gio-api-console-${GIO_API_CONSOLE_CLUSTER}-https.service=gio-api-console-${GIO_API_CONSOLE_CLUSTER}
@@ -90,7 +91,7 @@ services:
     environment:
       - TZ=America/Manaus
       
-      - MGMT_API_URL=https://${GIO_API_CONSOLE_APPLICATION}-${GIO_API_CONSOLE_CLUSTER}.${GIO_API_CONSOLE_DOMAIN}/management/organizations/DEFAULT/environments/DEFAULT/
+      - MGMT_API_URL=${GIO_MANAGEMENT_API_URL}/management/organizations/DEFAULT/environments/DEFAULT/
     
     deploy:
       mode: replicated
@@ -114,14 +115,15 @@ services:
         - traefik.http.middlewares.https-redirect.redirectscheme.scheme=https
         - traefik.http.middlewares.https-redirect.redirectscheme.permanent=true
 
-        - traefik.http.routers.gio-console-${GIO_CONSOLE_CLUSTER}-http.rule=Host(`${GIO_CONSOLE_APPLICATION}-${GIO_CONSOLE_CLUSTER}.${GIO_CONSOLE_DOMAIN}`)
+        - traefik.http.routers.gio-console-${GIO_CONSOLE_CLUSTER}-http.rule=Host(`${GIO_CONSOLE_APPLICATION}.${GIO_CONSOLE_CLUSTER}.${GIO_DOMAIN_BASE}`)
         - traefik.http.routers.gio-console-${GIO_CONSOLE_CLUSTER}-http.entrypoints=http
         - traefik.http.routers.gio-console-${GIO_CONSOLE_CLUSTER}-http.middlewares=https-redirect
         
         #HTTPS
-        - traefik.http.routers.gio-console-${GIO_CONSOLE_CLUSTER}-https.rule=Host(`${GIO_CONSOLE_APPLICATION}-${GIO_CONSOLE_CLUSTER}.${GIO_CONSOLE_DOMAIN}`)
+        - traefik.http.routers.gio-console-${GIO_CONSOLE_CLUSTER}-https.rule=Host(`${GIO_CONSOLE_APPLICATION}.${GIO_CONSOLE_CLUSTER}.${GIO_DOMAIN_BASE}`)
         - traefik.http.routers.gio-console-${GIO_CONSOLE_CLUSTER}-https.entrypoints=https
         - traefik.http.routers.gio-console-${GIO_CONSOLE_CLUSTER}-https.tls=true
+        - traefik.http.routers.gio-console-${GIO_CONSOLE_CLUSTER}-https.tls.certresolver=letsencrypt
         
         #Service
         - traefik.http.routers.gio-console-${GIO_CONSOLE_CLUSTER}-https.service=gio-console-${GIO_CONSOLE_CLUSTER}
@@ -143,7 +145,7 @@ services:
     environment:
       - TZ=America/Manaus
       
-      - PORTAL_API_URL=https://${GIO_API_CONSOLE_APPLICATION}-${GIO_API_CONSOLE_CLUSTER}.${GIO_API_CONSOLE_DOMAIN}/portal/environments/DEFAULT
+      - PORTAL_API_URL=${GIO_MANAGEMENT_API_URL}/portal/environments/DEFAULT
       
     deploy:
       mode: replicated
@@ -167,14 +169,15 @@ services:
         - traefik.http.middlewares.https-redirect.redirectscheme.scheme=https
         - traefik.http.middlewares.https-redirect.redirectscheme.permanent=true
 
-        - traefik.http.routers.gio-portal-${GIO_PORTAL_CLUSTER}-http.rule=Host(`${GIO_PORTAL_APPLICATION}-${GIO_PORTAL_CLUSTER}.${GIO_PORTAL_DOMAIN}`)
+        - traefik.http.routers.gio-portal-${GIO_PORTAL_CLUSTER}-http.rule=Host(`${GIO_PORTAL_APPLICATION}.${GIO_PORTAL_CLUSTER}.${GIO_DOMAIN_BASE}`)
         - traefik.http.routers.gio-portal-${GIO_PORTAL_CLUSTER}-http.entrypoints=http
         - traefik.http.routers.gio-portal-${GIO_PORTAL_CLUSTER}-http.middlewares=https-redirect
         
         #HTTPSp
-        - traefik.http.routers.gio-portal-${GIO_PORTAL_CLUSTER}-https.rule=Host(`${GIO_PORTAL_APPLICATION}-${GIO_PORTAL_CLUSTER}.${GIO_PORTAL_DOMAIN}`)
+        - traefik.http.routers.gio-portal-${GIO_PORTAL_CLUSTER}-https.rule=Host(`${GIO_PORTAL_APPLICATION}.${GIO_PORTAL_CLUSTER}.${GIO_DOMAIN_BASE}`)
         - traefik.http.routers.gio-portal-${GIO_PORTAL_CLUSTER}-https.entrypoints=https
         - traefik.http.routers.gio-portal-${GIO_PORTAL_CLUSTER}-https.tls=true
+        - traefik.http.routers.gio-portal-${GIO_PORTAL_CLUSTER}-https.tls.certresolver=letsencrypt
         
         #Service
         - traefik.http.routers.gio-portal-${GIO_PORTAL_CLUSTER}-https.service=gio-portal-${GIO_PORTAL_CLUSTER}

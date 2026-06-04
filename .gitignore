@@ -3,8 +3,6 @@
 .vscode/
 
 *.log
-.DS_Store
-.idea/
-.vscode/
 
-*.log
+# Ansible vault temp artifacts
+*.retry

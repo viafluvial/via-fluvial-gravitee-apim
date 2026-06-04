@@ -1,0 +1,11 @@
+project_id       = "vfa-plataforma-prd-k0ru"
+dns_project_id   = "vfa-dns-core"
+region           = "us-central1"
+dns_zone_name    = "zona-dns-viafluvial-com-br"
+dns_domain       = "plataforma.prd.viafluvial.com.br."
+create_zone      = false
+ttl              = 300
+
+repository_lb_ip = "34.95.10.10"
+management_lb_ip = "34.95.10.11"
+gateway_lb_ip    = "34.95.10.12"

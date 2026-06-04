@@ -6,23 +6,29 @@ CONTEXT ?= remote
 ALLOW_UNINSTALL ?= false
 FORCE ?= false
 
-# Interface no estilo do projeto de referência (docs/iac-onprem-cluster-swarm.zip)
+# Interface no estilo do projeto de referência
 ENVIRONMENT ?= prd
 WITH_PREREQS ?= false
 TARGET ?= platform
 
-PORTAINER_GATEWAY_ENV_FILE ?= ./config/portainer-gateway.env
-PORTAINER_MANAGEMENT_ENV_FILE ?= ./config/portainer-management.env
-PORTAINER_REPOSITORY_ENV_FILE ?= ./config/portainer-repository.env
+PORTAINER_GATEWAY_ENV_FILE ?= gcp/config/portainer-gateway.env
+PORTAINER_MANAGEMENT_ENV_FILE ?= gcp/config/portainer-management.env
+PORTAINER_REPOSITORY_ENV_FILE ?= gcp/config/portainer-repository.env
+
+TF_DNS_DIR ?= gcp/terraform/gravitee-dns
+TF_FIREWALL_DIR ?= gcp/terraform/gravitee-internal-firewall
 
 
 .PHONY: all help setup-local install-make-local install-sshpass-local install-ansible-local \
+	dns-init dns-plan dns-apply firewall-init firewall-plan firewall-apply \
 	check-tools check-ansible \
 	check-portainer-gateway check-portainer-management check-portainer-repository check-portainer-connectivity \
+	deploy-repository deploy-management deploy-gateway deploy-all \
 	install-repository validate-repository uninstall-repository \
 	install-management validate-management uninstall-management \
 	install-gateway validate-gateway uninstall-gateway \
 	install-platform validate-platform uninstall-platform \
+	uninstall-all uninstall-repository uninstall-management uninstall-gateway \
 	stacks install uninstall check clean clean-hard
 
 all: help
@@ -39,8 +45,16 @@ help:
 	@echo ""
 	@echo "[Pré-checagem]"
 	@echo "  make check-tools                     - valida dependências locais"
-	@echo "  make check-ansible                   - valida sintaxe dos scripts Ansible (bash -n)"
+	@echo "  make check-ansible                   - valida sintaxe dos scripts shell de orquestração (bash -n)"
 	@echo "  make check-portainer-connectivity    - valida APIs do Portainer (gateway/management/repository)"
+	@echo ""
+	@echo "[Terraform GCP]"
+	@echo "  make dns-init                        - terraform init em $(TF_DNS_DIR)"
+	@echo "  make dns-plan                        - terraform plan (Cloud DNS Gravitee)"
+	@echo "  make dns-apply                       - terraform apply (Cloud DNS Gravitee)"
+	@echo "  make firewall-init                   - terraform init em $(TF_FIREWALL_DIR)"
+	@echo "  make firewall-plan                   - terraform plan (firewall interno entre clusters)"
+	@echo "  make firewall-apply                  - terraform apply (firewall interno entre clusters)"
 	@echo ""
 	@echo "[Repository (Mongo + Elasticsearch + Kibana + Mongo-Express)]"
 	@echo "  make install-repository              - instala/atualiza stacks do repositório"
@@ -56,6 +70,7 @@ help:
 	@echo ""
 	@echo "[Plataforma - ponta a ponta]"
 	@echo "  make install-platform                - repository -> management -> gateway"
+	@echo "  make deploy-all                      - alias para install-platform"
 	@echo "  make validate-platform               - valida repository + management + gateway"
 	@echo ""
 	@echo "[Desinstalação - protegida]"
@@ -63,6 +78,7 @@ help:
 	@echo "  make uninstall-repository ALLOW_UNINSTALL=true"
 	@echo "  make uninstall-management ALLOW_UNINSTALL=true"
 	@echo "  make uninstall-gateway ALLOW_UNINSTALL=true"
+	@echo "  make uninstall-all ALLOW_UNINSTALL=true"
 	@echo "  (opcional) FORCE=true para limpeza mais agressiva"
 	@echo ""
 	@echo "[Interface estilo 'stacks' (aderente ao zip de referência)]"
@@ -106,16 +122,42 @@ check-ansible:
 	@echo "Sintaxe dos scripts OK."
 
 check-portainer-gateway:
-	@bash ./scripts/check-portainer-api.sh $(ANSIBLE_DIR)/$(PORTAINER_GATEWAY_ENV_FILE)
+	@bash ./scripts/check-portainer-api.sh $(PORTAINER_GATEWAY_ENV_FILE)
 
 check-portainer-management:
-	@bash ./scripts/check-portainer-api.sh $(ANSIBLE_DIR)/$(PORTAINER_MANAGEMENT_ENV_FILE)
+	@bash ./scripts/check-portainer-api.sh $(PORTAINER_MANAGEMENT_ENV_FILE)
 
 check-portainer-repository:
-	@bash ./scripts/check-portainer-api.sh $(ANSIBLE_DIR)/$(PORTAINER_REPOSITORY_ENV_FILE)
+	@bash ./scripts/check-portainer-api.sh $(PORTAINER_REPOSITORY_ENV_FILE)
 
 check-portainer-connectivity: check-portainer-gateway check-portainer-management check-portainer-repository
 	@echo "Conectividade/API dos Portainers validada."
+
+dns-init:
+	@terraform -chdir=$(TF_DNS_DIR) init
+
+dns-plan: dns-init
+	@terraform -chdir=$(TF_DNS_DIR) plan -var-file=terraform.tfvars
+
+dns-apply: dns-init
+	@terraform -chdir=$(TF_DNS_DIR) apply -var-file=terraform.tfvars
+
+firewall-init:
+	@terraform -chdir=$(TF_FIREWALL_DIR) init
+
+firewall-plan: firewall-init
+	@terraform -chdir=$(TF_FIREWALL_DIR) plan -var-file=terraform.tfvars
+
+firewall-apply: firewall-init
+	@terraform -chdir=$(TF_FIREWALL_DIR) apply -var-file=terraform.tfvars
+
+deploy-repository: install-repository
+
+deploy-management: install-management
+
+deploy-gateway: install-gateway
+
+deploy-all: install-platform
 
 install-repository:
 	@bash ./scripts/iac-gio-platform-repository.sh install $(CONTEXT) repository
@@ -170,6 +212,8 @@ uninstall-platform: require-uninstall-approval
 	@$(MAKE) uninstall-management ALLOW_UNINSTALL=$(ALLOW_UNINSTALL) FORCE=$(FORCE) CONTEXT=$(CONTEXT)
 	@$(MAKE) uninstall-repository ALLOW_UNINSTALL=$(ALLOW_UNINSTALL) FORCE=$(FORCE) CONTEXT=$(CONTEXT)
 	@echo "Remoção ponta a ponta concluída (gateway -> management -> repository)."
+
+uninstall-all: uninstall-platform
 
 
 # --- Interface estilo 'stacks' (compatível com o projeto de referência) ---

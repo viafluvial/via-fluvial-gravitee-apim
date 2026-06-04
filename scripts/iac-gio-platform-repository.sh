@@ -7,19 +7,32 @@ CLUSTER="${3:-repository}"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ANSIBLE_DIR="$ROOT_DIR/ansible"
-
-INVENTORY_FILE="${INVENTORY_FILE_OVERRIDE:-$ANSIBLE_DIR/config/inventory.ini}"
-INVENTORY_LIMIT_RESOLVED="${INVENTORY_LIMIT:-$CLUSTER}"
-ALLOW_UNINSTALL="${ALLOW_UNINSTALL:-false}"
 ENVIRONMENT="${ENVIRONMENT:-prd}"
 
+if [[ -n "${INVENTORY_FILE_OVERRIDE:-}" ]]; then
+	INVENTORY_FILE="$INVENTORY_FILE_OVERRIDE"
+elif [[ -f "$ROOT_DIR/gcp/config/inventory/${ENVIRONMENT}.ini" ]]; then
+	INVENTORY_FILE="$ROOT_DIR/gcp/config/inventory/${ENVIRONMENT}.ini"
+else
+	INVENTORY_FILE="$ANSIBLE_DIR/config/inventory/${ENVIRONMENT}.ini"
+fi
+
+INVENTORY_LIMIT_RESOLVED="${INVENTORY_LIMIT:-$CLUSTER}"
+ALLOW_UNINSTALL="${ALLOW_UNINSTALL:-false}"
+
 if [[ -z "${PORTAINER_ENV_FILE:-}" ]]; then
-	if [[ -f "$ANSIBLE_DIR/config/portainer-${CLUSTER}-${ENVIRONMENT}.env" ]]; then
+	if [[ -f "$ROOT_DIR/gcp/config/portainer-${CLUSTER}.env" ]]; then
+		PORTAINER_ENV_FILE="$ROOT_DIR/gcp/config/portainer-${CLUSTER}.env"
+	elif [[ -f "$ROOT_DIR/gcp/config/portainer-${CLUSTER}-${ENVIRONMENT}.env" ]]; then
+		PORTAINER_ENV_FILE="$ROOT_DIR/gcp/config/portainer-${CLUSTER}-${ENVIRONMENT}.env"
+	elif [[ -f "$ANSIBLE_DIR/config/portainer-${CLUSTER}-${ENVIRONMENT}.env" ]]; then
 		PORTAINER_ENV_FILE="$ANSIBLE_DIR/config/portainer-${CLUSTER}-${ENVIRONMENT}.env"
+	elif [[ -f "$ANSIBLE_DIR/config/portainer-${CLUSTER}.env" ]]; then
+		PORTAINER_ENV_FILE="$ANSIBLE_DIR/config/portainer-${CLUSTER}.env"
 	elif [[ -f "$ANSIBLE_DIR/config/portainer-${ENVIRONMENT}.env" ]]; then
 		PORTAINER_ENV_FILE="$ANSIBLE_DIR/config/portainer-${ENVIRONMENT}.env"
 	else
-		PORTAINER_ENV_FILE="$ANSIBLE_DIR/config/portainer-repository.env"
+		PORTAINER_ENV_FILE="$ROOT_DIR/gcp/config/portainer-repository.env"
 	fi
 fi
 
@@ -48,16 +61,17 @@ else
 fi
 
 export ANSIBLE_CONFIG="$ANSIBLE_DIR/config/ansible.cfg"
+export PORTAINER_EXPECTED_ENDPOINT_NAME="${PORTAINER_EXPECTED_ENDPOINT_NAME:-$CLUSTER}"
 
 case "$ACTION" in
 	install)
-		ansible-playbook -i "$INVENTORY_FILE" "$ANSIBLE_DIR/playbooks/gio/playbook-20C-install-gio-repository.yml" --limit "${INVENTORY_LIMIT_RESOLVED:-all}"
+		ansible-playbook -i "$INVENTORY_FILE" "$ANSIBLE_DIR/playbooks/gio/playbook-install-gio-repository.yml" --limit "${INVENTORY_LIMIT_RESOLVED:-all}"
 		;;
 	validate)
-		ansible-playbook -i "$INVENTORY_FILE" "$ANSIBLE_DIR/playbooks/gio/playbook-20V-validate-gio-repository.yml" --limit "${INVENTORY_LIMIT_RESOLVED:-all}"
+		ansible-playbook -i "$INVENTORY_FILE" "$ANSIBLE_DIR/playbooks/gio/playbook-validate-gio-repository.yml" --limit "${INVENTORY_LIMIT_RESOLVED:-all}"
 		;;
 	uninstall)
-		ansible-playbook -i "$INVENTORY_FILE" "$ANSIBLE_DIR/playbooks/gio/playbook-20D-uninstall-gio-repository.yml" --limit "${INVENTORY_LIMIT_RESOLVED:-all}"
+		ansible-playbook -i "$INVENTORY_FILE" "$ANSIBLE_DIR/playbooks/gio/playbook-uninstall-gio-repository.yml" --limit "${INVENTORY_LIMIT_RESOLVED:-all}"
 		;;
 	*)
 		echo "ACTION inválida: $ACTION" >&2

@@ -39,7 +39,7 @@ services:
 
         # TCP
         - traefik.tcp.routers.gio-mongo-${GIO_MONGO_CLUSTER}-tcp.entrypoints=mongo
-        - traefik.tcp.routers.gio-mongo-${GIO_MONGO_CLUSTER}-tcp.rule=HostSNI(`${GIO_MONGO_APPLICATION}-${GIO_MONGO_CLUSTER}.${GIO_MONGO_DOMAIN}`)
+        - traefik.tcp.routers.gio-mongo-${GIO_MONGO_CLUSTER}-tcp.rule=HostSNI(`${GIO_MONGO_APPLICATION}.${GIO_MONGO_CLUSTER}.${GIO_DOMAIN_BASE}`)
         - traefik.tcp.routers.gio-mongo-${GIO_MONGO_CLUSTER}-tcp.tls=true
         - traefik.tcp.routers.gio-mongo-${GIO_MONGO_CLUSTER}-tcp.service=gio-mongo-${GIO_MONGO_CLUSTER}
         - traefik.tcp.services.gio-mongo-${GIO_MONGO_CLUSTER}.loadbalancer.server.port=27017

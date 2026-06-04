@@ -1,0 +1,9 @@
+# PRD - preencha com hosts/IPs reais de SSH dos nós Swarm (não usar IP de Load Balancer aqui)
+[management]
+host-management ansible_host=CHANGE_ME_PRD_MANAGEMENT_HOST ansible_user=CHANGE_ME_PRD_SSH_USER ansible_become=true ansible_become_method=sudo ansible_python_interpreter=/usr/bin/python3
+
+[repository]
+host-repository ansible_host=CHANGE_ME_PRD_REPOSITORY_HOST ansible_user=CHANGE_ME_PRD_SSH_USER ansible_become=true ansible_become_method=sudo ansible_python_interpreter=/usr/bin/python3
+
+[gateway]
+host-gateway ansible_host=CHANGE_ME_PRD_GATEWAY_HOST ansible_user=CHANGE_ME_PRD_SSH_USER ansible_become=true ansible_become_method=sudo ansible_python_interpreter=/usr/bin/python3

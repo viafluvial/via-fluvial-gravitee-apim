@@ -1,0 +1,68 @@
+version: '3.9'
+
+services: 
+  kibana:
+    image: docker.elastic.co/kibana/kibana:${GIO_KIBANA_VERSION}
+
+    ports:
+      - "5601:5601"
+      
+    environment:
+      - TZ=America/Manaus
+
+      - server.name=kibana
+      - server.host=0.0.0.0
+
+      - ELASTICSEARCH_HOSTS=["http://${GIO_ELASTICSEARCH_HOST}:9200"]
+
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s 
+      placement:
+        constraints: [node.role == manager]
+        
+      labels:
+        #General
+        - traefik.enable=true
+        - traefik.network=service-public
+        - traefik.constraint-label=service-public
+        - traefik.docker.network=service-public
+        
+        #HTTP
+        - traefik.http.middlewares.https-redirect.redirectscheme.scheme=https
+        - traefik.http.middlewares.https-redirect.redirectscheme.permanent=true
+
+        - traefik.http.routers.gio-kibana-${GIO_KIBANA_CLUSTER}-http.rule=Host(`${GIO_KIBANA_APPLICATION}.${GIO_KIBANA_CLUSTER}.${GIO_DOMAIN_BASE}`)
+        - traefik.http.routers.gio-kibana-${GIO_KIBANA_CLUSTER}-http.entrypoints=http
+        - traefik.http.routers.gio-kibana-${GIO_KIBANA_CLUSTER}-http.middlewares=https-redirect
+        
+        #HTTPSp
+        - traefik.http.routers.gio-kibana-${GIO_KIBANA_CLUSTER}-https.rule=Host(`${GIO_KIBANA_APPLICATION}.${GIO_KIBANA_CLUSTER}.${GIO_DOMAIN_BASE}`)
+        - traefik.http.routers.gio-kibana-${GIO_KIBANA_CLUSTER}-https.entrypoints=https
+        - traefik.http.routers.gio-kibana-${GIO_KIBANA_CLUSTER}-https.tls=true
+        - traefik.http.routers.gio-kibana-${GIO_KIBANA_CLUSTER}-https.tls.certresolver=letsencrypt
+        
+        #Service
+        - traefik.http.routers.gio-kibana-${GIO_KIBANA_CLUSTER}-https.service=gio-kibana-${GIO_KIBANA_CLUSTER}
+
+        #Load Balance
+        - traefik.http.services.gio-kibana-${GIO_KIBANA_CLUSTER}.loadbalancer.server.port=5601        
+    
+    networks:
+      - service-public
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "7"       
+
+networks:
+  service-public:
+    external: true
+    name: service-public

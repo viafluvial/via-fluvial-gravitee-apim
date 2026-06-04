@@ -450,7 +450,7 @@ ds:
     port: 9200
 
 jwt:
-  secret: myJWT4Gr4v1t33_S3cr3t
+  secret: ${gravitee_jwt_secret:-change-me-jwt-secret}
   # Allows to define the end of validity of the token in seconds (default 604800 = a week)
   #expire-after: 604800
   # Allows to define the end of validity of the token in seconds for email registration (default 86400 = a day)
@@ -711,7 +711,7 @@ api:
   # Encrypt API properties using this secret
   properties:
     encryption:
-      secret: vvLJ4Q8Khvv9tm2tIPdkGEdmgKUruAL6
+      secret: ${gravitee_api_properties_encryption_secret:-change-me-api-properties-secret}
 
 # Scoring
 scoring:

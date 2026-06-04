@@ -11,6 +11,7 @@ INVENTORY_FILE_OVERRIDE="${INVENTORY_FILE_OVERRIDE:-}"
 ALLOW_DSV_CHANGES="${ALLOW_DSV_CHANGES:-false}"
 TASK_HISTORY_LIMIT="${TASK_HISTORY_LIMIT:-1}"
 CLEAN_STACKS="${CLEAN_STACKS:-}"
+ALLOW_PUBLIC_ANSIBLE_HOSTS="${ALLOW_PUBLIC_ANSIBLE_HOSTS:-false}"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ANSIBLE_DIR="$ROOT_DIR/ansible"
@@ -32,6 +33,7 @@ Variáveis opcionais:
 	ALLOW_DSV_CHANGES=true                   (libera alterações em dsv)
 	TASK_HISTORY_LIMIT=<n>                   (default: 1)
 	CLEAN_STACKS=<csv>                       (sobrescreve stacks para clean)
+		ALLOW_PUBLIC_ANSIBLE_HOSTS=true          (permite ansible_host publico; default bloqueado)
 USAGE
 }
 
@@ -45,24 +47,19 @@ require_tools() {
 resolve_inventory_file() {
 	local env="$1"
 	local inventory=""
-
-	case "$env" in
-		dsv) inventory="$ANSIBLE_DIR/config/inventory/dsv.ini" ;;
-		hml) inventory="$ANSIBLE_DIR/config/inventory/hml.ini" ;;
-		prd) inventory="$ANSIBLE_DIR/config/inventory/prd.ini" ;;
-		*)
-			echo "Ambiente '$env' não suportado. Use dsv, hml ou prd." >&2
-			exit 1
-			;;
-	esac
+	local gcp_inventory="$ROOT_DIR/gcp/config/inventory/${env}.ini"
+	local ansible_inventory="$ANSIBLE_DIR/config/inventory/${env}.ini"
 
 	if [[ -n "$INVENTORY_FILE_OVERRIDE" ]]; then
 		inventory="$INVENTORY_FILE_OVERRIDE"
-	fi
-
-	# fallback de compatibilidade
-	if [[ ! -f "$inventory" ]]; then
-		inventory="$ANSIBLE_DIR/config/inventory.ini"
+	elif [[ -f "$gcp_inventory" ]]; then
+		inventory="$gcp_inventory"
+	elif [[ -f "$ansible_inventory" ]]; then
+		inventory="$ansible_inventory"
+	else
+		echo "Inventário não encontrado para ambiente '$env'." >&2
+		echo "Crie: $gcp_inventory (pode copiar de $ROOT_DIR/gcp/config/inventory/prd.ini.example)" >&2
+		exit 1
 	fi
 
 	if [[ ! -f "$inventory" ]]; then
@@ -71,6 +68,81 @@ resolve_inventory_file() {
 	fi
 
 	echo "$inventory"
+}
+
+guard_inventory_hosts_are_not_lb_ips() {
+	local inventory_file="$1"
+	local tfvars_file="$ROOT_DIR/gcp/terraform/gravitee-dns/terraform.tfvars"
+
+	[[ -f "$inventory_file" ]] || return 0
+	[[ -f "$tfvars_file" ]] || return 0
+
+	local lb_ips
+	lb_ips="$(grep -E '^[[:space:]]*(repository_lb_ip|management_lb_ip|gateway_lb_ip)[[:space:]]*=' "$tfvars_file" | sed -E 's/.*=[[:space:]]*"?([0-9.]+)"?.*/\1/' | tr '\n' ' ')"
+	[[ -n "${lb_ips// }" ]] || return 0
+
+	local bad_hosts=""
+	local ip
+	for ip in $lb_ips; do
+		[[ -z "$ip" ]] && continue
+		if grep -Eq "ansible_host=${ip}(\\s|$)" "$inventory_file"; then
+			bad_hosts+=" $ip"
+		fi
+	done
+
+	if [[ -n "${bad_hosts// }" ]]; then
+		echo "[iac] Inventário inválido: ansible_host usa IP de load balancer:${bad_hosts}" >&2
+		echo "[iac] Use IP/hostname de nó Swarm (SSH), não IP público de LB." >&2
+		echo "[iac] LB público deve ficar apenas em gcp/terraform/gravitee-dns/terraform.tfvars." >&2
+		exit 1
+	fi
+}
+
+guard_inventory_hosts_are_private_or_hostname() {
+	local inventory_file="$1"
+	[[ -f "$inventory_file" ]] || return 0
+
+	local host
+	while IFS= read -r host; do
+		[[ -z "$host" ]] && continue
+
+		if [[ "$host" == CHANGE_ME_* ]]; then
+			echo "[iac] Inventário inválido: ansible_host placeholder detectado ($host)." >&2
+			echo "[iac] Defina host/IP real antes de executar." >&2
+			exit 1
+		fi
+
+		# Se for hostname/FQDN (não IPv4 literal), aceita.
+		if [[ ! "$host" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+			continue
+		fi
+
+		# Para IPv4 literal, exige faixa privada RFC1918 por padrão.
+		if [[ "$host" =~ ^10\. ]] || [[ "$host" =~ ^192\.168\. ]] || [[ "$host" =~ ^172\.(1[6-9]|2[0-9]|3[0-1])\. ]]; then
+			continue
+		fi
+
+		if [[ "$ALLOW_PUBLIC_ANSIBLE_HOSTS" != "true" ]]; then
+			echo "[iac] Inventário inválido: ansible_host público detectado ($host)." >&2
+			echo "[iac] Use IP privado/hostname interno para SSH. Para forçar, use ALLOW_PUBLIC_ANSIBLE_HOSTS=true." >&2
+			exit 1
+		fi
+	done < <(grep -Eo 'ansible_host=[^[:space:]]+' "$inventory_file" | cut -d= -f2)
+}
+
+guard_inventory_users_are_not_placeholders() {
+	local inventory_file="$1"
+	[[ -f "$inventory_file" ]] || return 0
+
+	local user
+	while IFS= read -r user; do
+		[[ -z "$user" ]] && continue
+		if [[ "$user" == CHANGE_ME_* ]]; then
+			echo "[iac] Inventário inválido: ansible_user placeholder detectado ($user)." >&2
+			echo "[iac] Defina usuário SSH real no inventário antes de executar." >&2
+			exit 1
+		fi
+	done < <(grep -Eo 'ansible_user=[^[:space:]]+' "$inventory_file" | cut -d= -f2)
 }
 
 guard_environment_safety() {
@@ -132,9 +204,8 @@ run_syntax_check() {
 		exit 1
 	fi
 
-	# Valida apenas os playbooks efetivamente usados pelo fluxo "stacks" (v2)
-	# para evitar falhas com playbooks legados que dependem de vault.
-	for pb in "$pb_dir"/playbook-2*.yml "$pb_dir"/playbook-90*.yml; do
+	# Valida apenas os playbooks efetivamente usados pelo fluxo atual.
+	for pb in "$pb_dir"/playbook-install-*.yml "$pb_dir"/playbook-validate-*.yml "$pb_dir"/playbook-uninstall-*.yml "$pb_dir"/playbook-clean-services.yml; do
 		[[ -f "$pb" ]] || continue
 		ANSIBLE_CONFIG="$ANSIBLE_DIR/config/ansible.cfg" ansible-playbook \
 			--syntax-check \
@@ -175,7 +246,7 @@ run_clean() {
 
 	ANSIBLE_CONFIG="$ANSIBLE_DIR/config/ansible.cfg" ansible-playbook \
 		-i "$inventory_file" \
-		"$ANSIBLE_DIR/playbooks/gio/playbook-90C-clean-services.yml" \
+		"$ANSIBLE_DIR/playbooks/gio/playbook-clean-services.yml" \
 		--limit "${limit_group:-all}" \
 		-e "task_history_limit=$TASK_HISTORY_LIMIT" \
 		-e "clean_stacks_csv=$stacks_csv"
@@ -205,6 +276,9 @@ require_tools
 guard_environment_safety
 
 inventory_file="$(resolve_inventory_file "$ENVIRONMENT")"
+guard_inventory_hosts_are_not_lb_ips "$inventory_file"
+guard_inventory_hosts_are_private_or_hostname "$inventory_file"
+guard_inventory_users_are_not_placeholders "$inventory_file"
 limit_group="$(resolve_limit_group_for_target "$ENVIRONMENT" "$TARGET")"
 
 echo "[iac] Ambiente: $ENVIRONMENT"

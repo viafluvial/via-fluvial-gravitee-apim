@@ -10,13 +10,7 @@ services:
       - TZ=America/Manaus
 
       - ME_CONFIG_MONGODB_ENABLE_ADMIN=true
-
-      - ME_CONFIG_MONGODB_SERVER=${SERVER_IP}
-
-      - ME_CONFIG_MONGODB_PORT=27017
-      
-      - ME_CONFIG_MONGODB_ADMINUSERNAME=${GIO_MONGO_ROOT_USERNAME}
-      - ME_CONFIG_MONGODB_ADMINPASSWORD=${GIO_MONGO_ROOT_PASSWORD}
+      - ME_CONFIG_MONGODB_URL=mongodb://${GIO_MONGO_ROOT_USERNAME}:${GIO_MONGO_ROOT_PASSWORD}@${GIO_MONGO_HOST}:27017/admin?authSource=admin
 
       - ME_CONFIG_BASICAUTH_USERNAME=${GIO_MONGO_EXPRESS_USERNAME}
       - ME_CONFIG_BASICAUTH_PASSWORD=${GIO_MONGO_EXPRESS_PASSWORD}
@@ -43,14 +37,15 @@ services:
         - traefik.http.middlewares.https-redirect.redirectscheme.scheme=https
         - traefik.http.middlewares.https-redirect.redirectscheme.permanent=true
 
-        - traefik.http.routers.gio-mongo-express-${GIO_MONGO_EXPRESS_CLUSTER}-http.rule=Host(`${GIO_MONGO_EXPRESS_APPLICATION}-${GIO_MONGO_EXPRESS_CLUSTER}.${GIO_MONGO_EXPRESS_DOMAIN}`)
+        - traefik.http.routers.gio-mongo-express-${GIO_MONGO_EXPRESS_CLUSTER}-http.rule=Host(`${GIO_MONGO_EXPRESS_APPLICATION}.${GIO_MONGO_EXPRESS_CLUSTER}.${GIO_DOMAIN_BASE}`)
         - traefik.http.routers.gio-mongo-express-${GIO_MONGO_EXPRESS_CLUSTER}-http.entrypoints=http
         - traefik.http.routers.gio-mongo-express-${GIO_MONGO_EXPRESS_CLUSTER}-http.middlewares=https-redirect
         
         #HTTPSp
-        - traefik.http.routers.gio-mongo-express-${GIO_MONGO_EXPRESS_CLUSTER}-https.rule=Host(`${GIO_MONGO_EXPRESS_APPLICATION}-${GIO_MONGO_EXPRESS_CLUSTER}.${GIO_MONGO_EXPRESS_DOMAIN}`)
+        - traefik.http.routers.gio-mongo-express-${GIO_MONGO_EXPRESS_CLUSTER}-https.rule=Host(`${GIO_MONGO_EXPRESS_APPLICATION}.${GIO_MONGO_EXPRESS_CLUSTER}.${GIO_DOMAIN_BASE}`)
         - traefik.http.routers.gio-mongo-express-${GIO_MONGO_EXPRESS_CLUSTER}-https.entrypoints=https
         - traefik.http.routers.gio-mongo-express-${GIO_MONGO_EXPRESS_CLUSTER}-https.tls=true
+        - traefik.http.routers.gio-mongo-express-${GIO_MONGO_EXPRESS_CLUSTER}-https.tls.certresolver=letsencrypt
         
         #Service
         - traefik.http.routers.gio-mongo-express-${GIO_MONGO_EXPRESS_CLUSTER}-https.service=gio-mongo-express-${GIO_MONGO_EXPRESS_CLUSTER}
