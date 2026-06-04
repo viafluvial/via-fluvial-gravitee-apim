@@ -14,6 +14,6 @@
 
 # Ansible vault temp artifacts
 *.retry
-.terraform/
-**/.terraform/
-.terraform.lock.hcl
+
+# Local credentials (never commit)
+credentials/sa.json
