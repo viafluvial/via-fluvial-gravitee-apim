@@ -4,5 +4,13 @@
 
 *.log
 
+# Terraform local state
+**/.terraform/
+**/.terraform.lock.hcl
+**/terraform.tfstate
+**/terraform.tfstate.*
+**/tfplan
+
+
 # Ansible vault temp artifacts
 *.retry
