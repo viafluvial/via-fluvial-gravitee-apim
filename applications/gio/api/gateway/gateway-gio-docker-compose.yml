@@ -94,4 +94,4 @@ services:
 networks:
   service-public:
     external: true
-    name: service-public
+    name: service-public
