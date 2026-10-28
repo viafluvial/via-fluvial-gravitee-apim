@@ -12,6 +12,33 @@ services:
     
     volumes:
       - "/opt/service-center/gio/gateway/api-gateway/logs:/opt/graviteeio-gateway/logs"
+
+    # Backends da plataforma pelo IP interno do Traefik de cada cluster (sem ida e volta pelo load balancer
+    # publico). Lista gerada do catalogo do via-fluvial-services (api_public_fqdn) + SSO do cluster identity.
+    extra_hosts:
+      - "api-acervo-digital.api.plataforma.prd.viafluvial.com.br:10.60.4.18"
+      - "api-administracao.api.plataforma.prd.viafluvial.com.br:10.60.4.18"
+      - "api-auditoria.api.plataforma.prd.viafluvial.com.br:10.60.4.18"
+      - "api-avaliacoes-experiencia.api.plataforma.prd.viafluvial.com.br:10.60.4.18"
+      - "api-compliance.api.plataforma.prd.viafluvial.com.br:10.60.4.18"
+      - "api-embarcacoes.api.plataforma.prd.viafluvial.com.br:10.60.4.18"
+      - "api-engenharia-operacoes.api.plataforma.prd.viafluvial.com.br:10.60.4.18"
+      - "api-financeiro.api.plataforma.prd.viafluvial.com.br:10.60.4.18"
+      - "api-fretes-cargas.api.plataforma.prd.viafluvial.com.br:10.60.4.18"
+      - "api-identidade-autenticacao.api.plataforma.prd.viafluvial.com.br:10.60.4.18"
+      - "api-notificacoes.api.plataforma.prd.viafluvial.com.br:10.60.4.18"
+      - "api-operacoes-agencia.api.plataforma.prd.viafluvial.com.br:10.60.4.18"
+      - "api-pagamentos.api.plataforma.prd.viafluvial.com.br:10.60.4.18"
+      - "api-perfis-usuarios.api.plataforma.prd.viafluvial.com.br:10.60.4.18"
+      - "api-relatorios.api.plataforma.prd.viafluvial.com.br:10.60.4.18"
+      - "api-reservas.api.plataforma.prd.viafluvial.com.br:10.60.4.18"
+      - "api-rotas-portos.api.plataforma.prd.viafluvial.com.br:10.60.4.18"
+      - "api-suporte.api.plataforma.prd.viafluvial.com.br:10.60.4.18"
+      - "api-ticket-suporte.api.plataforma.prd.viafluvial.com.br:10.60.4.18"
+      - "api-tripulacao.api.plataforma.prd.viafluvial.com.br:10.60.4.18"
+      - "api-venda-ingressos.api.plataforma.prd.viafluvial.com.br:10.60.4.18"
+      - "api-viagens.api.plataforma.prd.viafluvial.com.br:10.60.4.18"
+      - "sso.identity.plataforma.prd.viafluvial.com.br:10.60.4.21"
     
     environment:
       - TZ=America/Manaus
